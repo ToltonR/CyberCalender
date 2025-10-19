@@ -17,6 +17,11 @@ local DEFAULT_UPCOMING_LIMIT = 3
 
 local M = {}
 
+-- ---------- Test Function ----------
+function M.HelloWorld()
+  return "Hello World from Parser!"
+end
+
 -- ---------- Helpers ----------
 local function trim(s)
   if not s then return s end

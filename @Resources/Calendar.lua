@@ -1,6 +1,29 @@
 -- Calendar Grid Generation for Rainmeter
 -- ===============================================
 
+-- Debug function to show ALL parsed events
+function GetDebugOutput()
+  local result = GetParsedResultJson()
+  if not result then
+    return "No parsed result"
+  end
+
+  -- Show event counts
+  local output = "Today: " .. (result.todayCount or 0) .. " | Upcoming: " .. (result.upcomingCount or 0)
+
+  -- Show ALL today events
+  if result.todayEvents and #result.todayEvents > 0 then
+    output = output .. " | Today Events: "
+    for i, event in ipairs(result.todayEvents) do
+      output = output .. "[" .. i .. ": " .. (event.summary or "?") .. " " .. (event.timeText or "?") .. "] "
+    end
+  else
+    output = output .. " | No Today Events"
+  end
+
+  return output
+end
+
 function Initialize()
     currentMonth = tonumber(os.date('%m'))
     currentYear = tonumber(os.date('%Y'))
@@ -360,39 +383,30 @@ end
 -- TODAY EVENTS FUNCTIONS
 -- ===============================================
 
--- Get today's events only
-function GetTodayEvents()
-  local allEvents = GetParsedEvents(50) -- Get more events to filter
-  local todayEvents = {}
-  local todayDate = os.date("%Y%m%d")
-
-  for _, ev in ipairs(allEvents) do
-    local eventDate = string.sub(ev.dt, 1, 8) -- Extract YYYYMMDD
-    if eventDate == todayDate then
-      table.insert(todayEvents, ev)
-    end
-  end
-
-  return todayEvents
-end
-
 -- Check if a today event exists
 function HasTodayEvent(index)
   index = tonumber(index) or 1
-  local todayEvents = GetTodayEvents()
-  if todayEvents[index] then
+  local result = GetParsedResultJson()
+  if not result or not result.todayEvents then
+    return 0
+  end
+  if result.todayEvents[index] then
     return 1
   else
     return 0
   end
 end
 
--- Get today event date
+-- Get today event date (time text)
 function GetTodayEventDate(index)
   index = tonumber(index) or 1
-  local todayEvents = GetTodayEvents()
-  if todayEvents[index] then
-    return FormatEventDateTime(todayEvents[index].dt)
+  local result = GetParsedResultJson()
+  if not result or not result.todayEvents then
+    return ""
+  end
+  local event = result.todayEvents[index]
+  if event then
+    return event.timeText or ""
   else
     return ""
   end
@@ -401,9 +415,13 @@ end
 -- Get today event title
 function GetTodayEventTitle(index)
   index = tonumber(index) or 1
-  local todayEvents = GetTodayEvents()
-  if todayEvents[index] then
-    return todayEvents[index].title
+  local result = GetParsedResultJson()
+  if not result or not result.todayEvents then
+    return ""
+  end
+  local event = result.todayEvents[index]
+  if event then
+    return event.summary or ""
   else
     return ""
   end
@@ -413,43 +431,37 @@ end
 -- UPCOMING EVENTS FUNCTIONS (excluding today)
 -- ===============================================
 
--- Get upcoming events (excluding today's events)
-function GetUpcomingEvents(maxEvents)
-  maxEvents = tonumber(maxEvents) or 5
-  local allEvents = GetParsedEvents(50)
-  local upcomingEvents = {}
-  local todayDate = os.date("%Y%m%d")
-
-  for _, ev in ipairs(allEvents) do
-    local eventDate = string.sub(ev.dt, 1, 8) -- Extract YYYYMMDD
-    if eventDate > todayDate then
-      table.insert(upcomingEvents, ev)
-      if #upcomingEvents >= maxEvents then
-        break
-      end
-    end
-  end
-
-  return upcomingEvents
-end
-
 -- Check if an upcoming event exists
 function HasUpcomingEvent(index)
   index = tonumber(index) or 1
-  local upcomingEvents = GetUpcomingEvents(10)
-  if upcomingEvents[index] then
+  local result = GetParsedResultJson()
+  if not result or not result.upcomingEvents then
+    return 0
+  end
+  if result.upcomingEvents[index] then
     return 1
   else
     return 0
   end
 end
 
--- Get upcoming event date
+-- Get upcoming event date with full info (date + time/all day)
 function GetUpcomingEventDate(index)
   index = tonumber(index) or 1
-  local upcomingEvents = GetUpcomingEvents(10)
-  if upcomingEvents[index] then
-    return FormatEventDateTime(upcomingEvents[index].dt)
+  local result = GetParsedResultJson()
+  if not result or not result.upcomingEvents then
+    return ""
+  end
+  local event = result.upcomingEvents[index]
+  if event then
+    -- Return format: "YYYY-MM-DD, HH:MM - HH:MM" or "YYYY-MM-DD, All day"
+    local dateStr = event.dtStartDate or ""
+    local timeStr = event.timeText or "All day"
+    if dateStr ~= "" then
+      return dateStr .. ", " .. timeStr
+    else
+      return timeStr
+    end
   else
     return ""
   end
@@ -458,10 +470,255 @@ end
 -- Get upcoming event title
 function GetUpcomingEventTitle(index)
   index = tonumber(index) or 1
-  local upcomingEvents = GetUpcomingEvents(10)
-  if upcomingEvents[index] then
-    return upcomingEvents[index].title
+  local result = GetParsedResultJson()
+  if not result or not result.upcomingEvents then
+    return ""
+  end
+  local event = result.upcomingEvents[index]
+  if event then
+    return event.summary or ""
   else
     return ""
   end
+end
+
+-- ===============================================
+-- PARSER FUNCTIONS (from Parser.lua)
+-- ===============================================
+
+local function trim(s)
+  if not s then return s end
+  return s:match("^%s*(.-)%s*$")
+end
+
+-- Convert UTC time to IST and track if date changed
+-- Returns: time_string, date_offset (0 = same day, 1 = next day, -1 = prev day)
+local function convertUtcToIst(time)
+  if not time then return time, 0 end
+  local h, m = time:match("^(%d%d):(%d%d)")
+  if not h then return time, 0 end
+  h, m = tonumber(h), tonumber(m)
+  local total = h * 60 + m + 330 -- +5h30m
+  local dateOffset = 0
+
+  if total >= (24 * 60) then
+    dateOffset = 1  -- Next day
+    total = total % (24 * 60)
+  elseif total < 0 then
+    dateOffset = -1  -- Previous day
+    total = (24 * 60) + total
+  end
+
+  local hh = math.floor(total / 60)
+  local mm = total % 60
+  return string.format("%02d:%02d", hh, mm), dateOffset
+end
+
+-- Helper to add days to a date string (YYYY-MM-DD format)
+local function addDaysToDate(dateStr, days)
+  if not dateStr or days == 0 then return dateStr end
+  local y, m, d = dateStr:match("^(%d%d%d%d)-(%d%d)-(%d%d)$")
+  if not y then return dateStr end
+
+  y, m, d = tonumber(y), tonumber(m), tonumber(d)
+  d = d + days
+
+  -- Simple date math (good enough for ±1 days)
+  if d > 31 then
+    d = d - 31
+    m = m + 1
+    if m > 12 then
+      m = 1
+      y = y + 1
+    end
+  elseif d < 1 then
+    m = m - 1
+    if m < 1 then
+      m = 12
+      y = y - 1
+    end
+    d = d + 31
+  end
+
+  return string.format("%04d-%02d-%02d", y, m, d)
+end
+
+local function parseDtRaw(s)
+  if not s then return nil end
+  local out = { date = nil, time = nil, isAllDay = false, isUtc = false }
+  s = trim(s)
+  local y, m, d = s:match("^(%d%d%d%d)(%d%d)(%d%d)$")
+  if y then
+    out.date = ("%s-%s-%s"):format(y, m, d)
+    out.isAllDay = true
+    return out
+  end
+  local y2, mo, da, hh, mi, ss = s:match("^(%d%d%d%d)(%d%d)(%d%d)T(%d%d)(%d%d)(%d%d)Z$")
+  if y2 then
+    out.date = ("%s-%s-%s"):format(y2, mo, da)
+    out.time = ("%s:%s:%s"):format(hh, mi, ss)
+    out.isUtc = true
+    return out
+  end
+  local y3, mo3, da3, hh3, mi3, ss3 = s:match("^(%d%d%d%d)(%d%d)(%d%d)T(%d%d)(%d%d)(%d%d)$")
+  if y3 then
+    out.date = ("%s-%s-%s"):format(y3, mo3, da3)
+    out.time = ("%s:%s:%s"):format(hh3, mi3, ss3)
+    return out
+  end
+  return out
+end
+
+-- Format time range and return timeText + dateOffset for start date
+-- dateOffset tells us if the local date shifted due to UTC conversion
+local function formatTimeRange(start, finish, isAllDay, startIsUtc, endIsUtc)
+  if isAllDay then return "All day", 0 end
+  local function short(t) return t and t:sub(1, 5) or nil end
+  local dateOffset = 0
+
+  if startIsUtc then
+    start, dateOffset = convertUtcToIst(start)
+  end
+  if endIsUtc then
+    finish = convertUtcToIst(finish)  -- We only care about dateOffset for start
+  end
+
+  local timeText
+  if start and finish then
+    timeText = short(start) .. " - " .. short(finish)
+  elseif start then
+    timeText = short(start)
+  else
+    timeText = nil
+  end
+
+  return timeText, dateOffset
+end
+
+local function parseIcs(body)
+  if not body then return {} end
+  body = body:gsub("\r\n", "\n"):gsub("\r", "\n"):gsub("\n[ \t]", "")
+  local events = {}
+  for block in body:gmatch("BEGIN:VEVENT(.-)END:VEVENT") do
+    if type(block) == "string" then
+      local e = {}
+      e.uid = trim(block:match("UID:([^\n\r]+)"))
+      e.dtStartRaw = trim(block:match("DTSTART[^:]*:([^\n\r]+)"))
+      e.dtEndRaw = trim(block:match("DTEND[^:]*:([^\n\r]+)"))
+      e.summary = trim(block:match("SUMMARY:([^\n\r]+)"))
+      e.description = trim(block:match("DESCRIPTION:([^\n\r]+)"))
+      e.location = trim(block:match("LOCATION:([^\n\r]+)"))
+      e._start = parseDtRaw(e.dtStartRaw)
+      e._end = parseDtRaw(e.dtEndRaw)
+      e.dtStartDate = e._start and e._start.date or nil
+      e.dtEndDate = e._end and e._end.date or nil
+      e.isAllDay = (e._start and e._start.isAllDay) or false
+
+      -- Get timeText and dateOffset (for UTC->IST conversion)
+      local timeText, dateOffset = formatTimeRange(
+        e._start and e._start.time,
+        e._end and e._end.time,
+        e.isAllDay,
+        e._start and e._start.isUtc,
+        e._end and e._end.isUtc
+      )
+      e.timeText = timeText
+
+      -- Adjust dtStartDate if UTC->IST conversion shifted the date
+      if dateOffset ~= 0 and e.dtStartDate then
+        e.dtStartDate = addDaysToDate(e.dtStartDate, dateOffset)
+      end
+
+      table.insert(events, e)
+    end
+  end
+  return events
+end
+
+local function filterEvents(events, today)
+  today = today or os.date("%Y-%m-%d")
+  local todayEvents, upcomingEvents = {}, {}
+  for _, e in ipairs(events) do
+    if e.dtStartDate == today then
+      table.insert(todayEvents, e)
+    elseif e.dtStartDate and e.dtStartDate > today then
+      table.insert(upcomingEvents, e)
+    end
+  end
+  table.sort(upcomingEvents, function(a, b) return (a.dtStartRaw or "") < (b.dtStartRaw or "") end)
+  table.sort(todayEvents, function(a, b) return (a.dtStartRaw or "") < (b.dtStartRaw or "") end)
+  return todayEvents, upcomingEvents
+end
+
+local function slimEvent(e)
+  if not e then return nil end
+  return {
+    summary = e.summary,
+    dtStartDate = e.dtStartDate,
+    dtEndDate = e.dtEndDate,
+    timeText = e.timeText,
+    description = e.description,
+    location = e.location
+  }
+end
+
+local function formatOutput(todayEvents, upcomingEvents, today, limit)
+  limit = limit or 5
+  today = today or os.date("%Y-%m-%d")
+  local next = {}
+  for i = 1, math.min(limit, #upcomingEvents) do
+    table.insert(next, upcomingEvents[i])
+  end
+  local out = {
+    todayDate = today,
+    todayCount = #todayEvents,
+    upcomingCount = #upcomingEvents,
+    todayEvents = {},
+    upcomingEvents = {}
+  }
+  for _, e in ipairs(todayEvents) do
+    table.insert(out.todayEvents, slimEvent(e))
+  end
+  for _, e in ipairs(next) do
+    table.insert(out.upcomingEvents, slimEvent(e))
+  end
+  return out
+end
+
+local _cached_parsed_result = nil
+local _cached_ics_content = nil
+
+function GetParsedResultJson()
+  local icsContent = ""
+  if SKIN then
+    local measure = SKIN:GetMeasure('MeasureEventParser')
+    if measure then
+      if measure.GetStringValue then
+        icsContent = measure:GetStringValue() or ""
+      elseif measure.GetString then
+        icsContent = measure:GetString() or ""
+      else
+        icsContent = tostring(measure:GetValue() or "")
+      end
+    end
+  end
+
+  if icsContent == _cached_ics_content and _cached_parsed_result then
+    return _cached_parsed_result
+  end
+
+  if icsContent == "" then
+    print('WARNING: No ICS content from MeasureEventParser')
+    return nil
+  end
+
+  local events = parseIcs(icsContent)
+  local today = os.date("%Y-%m-%d")
+  local todayEvents, upcomingEvents = filterEvents(events, today)
+  local result = formatOutput(todayEvents, upcomingEvents, today, 5)
+
+  _cached_ics_content = icsContent
+  _cached_parsed_result = result
+
+  return result
 end
