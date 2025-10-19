@@ -1,36 +1,87 @@
 -- Calendar Grid Generation for Rainmeter
 -- ===============================================
 
--- Debug function to show ALL parsed events
+-- Debug function to show selected date and events
 function GetDebugOutput()
-  local result = GetParsedResultJson()
-  if not result then
-    return "No parsed result"
+  local selected = GetSelectedDate()
+  local today = os.date("%Y-%m-%d")
+
+  local output = ""
+  if selected == today then
+    output = "It's today - " .. selected
+  else
+    output = selected
   end
 
-  -- Show event counts
-  local output = "Today: " .. (result.todayCount or 0) .. " | Upcoming: " .. (result.upcomingCount or 0)
-
-  -- Show ALL today events
-  if result.todayEvents and #result.todayEvents > 0 then
-    output = output .. " | Today Events: "
+  -- Get events for the selected date
+  local result = GetParsedResultJson(selected)
+  if result and result.todayEvents then
     for i, event in ipairs(result.todayEvents) do
-      output = output .. "[" .. i .. ": " .. (event.summary or "?") .. " " .. (event.timeText or "?") .. "] "
+      output = output .. "\n" .. (event.summary or "")
+      if event.timeText then
+        output = output .. " - " .. event.timeText
+      end
     end
-  else
-    output = output .. " | No Today Events"
   end
 
   return output
 end
+
+-- Selected date for viewing events (YYYY-MM-DD format)
+local selectedDate = nil
 
 function Initialize()
     currentMonth = tonumber(os.date('%m'))
     currentYear = tonumber(os.date('%Y'))
     todayDay = tonumber(os.date('%d'))
 
+    -- Initialize selectedDate to today
+    selectedDate = os.date("%Y-%m-%d")
+
     -- Debug: Log the initialization
     print('Calendar initialized: ' .. currentMonth .. '/' .. todayDay .. '/' .. currentYear)
+end
+
+-- Set selected date when user clicks on a date (index is 0-41, the cell index)
+function SetSelectedDate(index)
+    index = tonumber(index) or 0
+
+    if not currentMonth or not currentYear then
+        Initialize()
+    end
+
+    local daysInMonth = GetDaysInMonth(currentMonth, currentYear)
+    local firstDayOfWeek = GetFirstDayOfWeek(currentMonth, currentYear)
+    local dayNum = index - firstDayOfWeek + 1
+
+    -- Use the same logic as IsInCurrentMonth to determine which month/year
+    if dayNum >= 1 and dayNum <= daysInMonth then
+        -- Current month (blue date)
+        selectedDate = string.format("%04d-%02d-%02d", currentYear, currentMonth, dayNum)
+    elseif dayNum < 1 then
+        -- Previous month (grey date) - flip to previous month
+        PrevMonth()
+        local prevMonthDays = GetDaysInMonth(currentMonth, currentYear)
+        local actualDay = prevMonthDays + dayNum
+        selectedDate = string.format("%04d-%02d-%02d", currentYear, currentMonth, actualDay)
+    else
+        -- Next month (grey date) - flip to next month
+        NextMonth()
+        local actualDay = dayNum - daysInMonth
+        selectedDate = string.format("%04d-%02d-%02d", currentYear, currentMonth, actualDay)
+    end
+
+    -- Check if the selected date is today
+    if selectedDate == os.date("%Y-%m-%d") then
+        print('Selected date: It\'s today - ' .. selectedDate)
+    else
+        print('Selected date: ' .. selectedDate)
+    end
+end
+
+-- Get the currently selected date
+function GetSelectedDate()
+    return selectedDate or os.date("%Y-%m-%d")
 end
 
 function Update()
@@ -170,6 +221,8 @@ function GoToToday()
     currentMonth = tonumber(os.date('%m'))
     currentYear = tonumber(os.date('%Y'))
     todayDay = tonumber(os.date('%d'))
+    -- Also set selected date to today
+    selectedDate = os.date("%Y-%m-%d")
 end
 
 -- Get current month name and year
@@ -196,6 +249,41 @@ function GetDayColor(index)
         return "20,20,20,255"  -- Dark text on cyan circle
     end
 
+    -- Check if selected date (and not today) - return black text for white circle
+    if selectedDate then
+        local daysInMonth = GetDaysInMonth(currentMonth, currentYear)
+        local firstDayOfWeek = GetFirstDayOfWeek(currentMonth, currentYear)
+        local dayNum = index - firstDayOfWeek + 1
+
+        local cellDate
+        if dayNum >= 1 and dayNum <= daysInMonth then
+            cellDate = string.format("%04d-%02d-%02d", currentYear, currentMonth, dayNum)
+        elseif dayNum < 1 then
+            local prevMonth = currentMonth - 1
+            local prevYear = currentYear
+            if prevMonth < 1 then
+                prevMonth = 12
+                prevYear = prevYear - 1
+            end
+            local prevMonthDays = GetDaysInMonth(prevMonth, prevYear)
+            local actualDay = prevMonthDays + dayNum
+            cellDate = string.format("%04d-%02d-%02d", prevYear, prevMonth, actualDay)
+        else
+            local nextMonth = currentMonth + 1
+            local nextYear = currentYear
+            if nextMonth > 12 then
+                nextMonth = 1
+                nextYear = nextYear + 1
+            end
+            local actualDay = dayNum - daysInMonth
+            cellDate = string.format("%04d-%02d-%02d", nextYear, nextMonth, actualDay)
+        end
+
+        if cellDate == selectedDate then
+            return "0,0,0,255"  -- Black text on white circle
+        end
+    end
+
     -- Check if in current month
     if IsInCurrentMonth(index) == 0 then
         return "80,80,80,150"  -- ColorDayOtherMonth
@@ -219,6 +307,115 @@ function GetTodayBG(index)
     end
 
     -- Otherwise transparent
+    return "0,0,0,0"
+end
+
+-- Get background circle color - returns cyan for today, white for selected (not today)
+function GetDayBG(index)
+    index = tonumber(index) or 0
+
+    if not currentMonth or not currentYear then
+        Initialize()
+    end
+
+    -- If today, return cyan background
+    if IsToday(index) == 1 then
+        return "0,200,255,255"  -- Cyan circle
+    end
+
+    -- If it's the selected date (and NOT today), return white
+    if not selectedDate then
+        return "0,0,0,0"
+    end
+
+    local daysInMonth = GetDaysInMonth(currentMonth, currentYear)
+    local firstDayOfWeek = GetFirstDayOfWeek(currentMonth, currentYear)
+    local dayNum = index - firstDayOfWeek + 1
+
+    local cellDate
+    if dayNum >= 1 and dayNum <= daysInMonth then
+        cellDate = string.format("%04d-%02d-%02d", currentYear, currentMonth, dayNum)
+    elseif dayNum < 1 then
+        local prevMonth = currentMonth - 1
+        local prevYear = currentYear
+        if prevMonth < 1 then
+            prevMonth = 12
+            prevYear = prevYear - 1
+        end
+        local prevMonthDays = GetDaysInMonth(prevMonth, prevYear)
+        local actualDay = prevMonthDays + dayNum
+        cellDate = string.format("%04d-%02d-%02d", prevYear, prevMonth, actualDay)
+    else
+        local nextMonth = currentMonth + 1
+        local nextYear = currentYear
+        if nextMonth > 12 then
+            nextMonth = 1
+            nextYear = nextYear + 1
+        end
+        local actualDay = dayNum - daysInMonth
+        cellDate = string.format("%04d-%02d-%02d", nextYear, nextMonth, actualDay)
+    end
+
+    -- Return white if selected date
+    if cellDate == selectedDate then
+        return "255,255,255,255"  -- White circle
+    end
+
+    return "0,0,0,0"
+end
+
+-- Get background circle color for selected date (white, only if NOT today)
+function GetSelectedDateBG(index)
+    index = tonumber(index) or 0
+
+    if not currentMonth or not currentYear then
+        Initialize()
+    end
+
+    -- If it's today, don't show white (today keeps cyan)
+    if IsToday(index) == 1 then
+        return "0,0,0,0"  -- Transparent
+    end
+
+    -- Check if this date matches selected date
+    if not selectedDate then
+        return "0,0,0,0"
+    end
+
+    local daysInMonth = GetDaysInMonth(currentMonth, currentYear)
+    local firstDayOfWeek = GetFirstDayOfWeek(currentMonth, currentYear)
+    local dayNum = index - firstDayOfWeek + 1
+
+    local cellDate
+    if dayNum >= 1 and dayNum <= daysInMonth then
+        cellDate = string.format("%04d-%02d-%02d", currentYear, currentMonth, dayNum)
+    elseif dayNum < 1 then
+        local prevMonth = currentMonth - 1
+        local prevYear = currentYear
+        if prevMonth < 1 then
+            prevMonth = 12
+            prevYear = prevYear - 1
+        end
+        local prevMonthDays = GetDaysInMonth(prevMonth, prevYear)
+        local actualDay = prevMonthDays + dayNum
+        cellDate = string.format("%04d-%02d-%02d", prevYear, prevMonth, actualDay)
+    else
+        local nextMonth = currentMonth + 1
+        local nextYear = currentYear
+        if nextMonth > 12 then
+            nextMonth = 1
+            nextYear = nextYear + 1
+        end
+        local actualDay = dayNum - daysInMonth
+        cellDate = string.format("%04d-%02d-%02d", nextYear, nextMonth, actualDay)
+    end
+
+    -- Return white if selected date
+    if cellDate == selectedDate then
+        print('White circle for ' .. cellDate .. ' (selected: ' .. selectedDate .. ')')
+        return "255,255,255,255"  -- White circle
+    end
+
     return "0,0,0,0"
 end
 
@@ -386,7 +583,8 @@ end
 -- Check if a today event exists
 function HasTodayEvent(index)
   index = tonumber(index) or 1
-  local result = GetParsedResultJson()
+  local selected = GetSelectedDate()
+  local result = GetParsedResultJson(selected)
   if not result or not result.todayEvents then
     return 0
   end
@@ -397,10 +595,23 @@ function HasTodayEvent(index)
   end
 end
 
--- Get today event date (time text)
+-- Get header for selected date events section
+function GetSelectedDateEventsHeader()
+  local selected = GetSelectedDate()
+  local today = os.date("%Y-%m-%d")
+
+  if selected == today then
+    return "TODAY EVENTS"
+  else
+    return selected .. " EVENTS"
+  end
+end
+
+-- Get today event date (time text) - actually for selected date
 function GetTodayEventDate(index)
   index = tonumber(index) or 1
-  local result = GetParsedResultJson()
+  local selected = GetSelectedDate()
+  local result = GetParsedResultJson(selected)
   if not result or not result.todayEvents then
     return ""
   end
@@ -412,10 +623,11 @@ function GetTodayEventDate(index)
   end
 end
 
--- Get today event title
+-- Get today event title - actually for selected date
 function GetTodayEventTitle(index)
   index = tonumber(index) or 1
-  local result = GetParsedResultJson()
+  local selected = GetSelectedDate()
+  local result = GetParsedResultJson(selected)
   if not result or not result.todayEvents then
     return ""
   end
@@ -687,8 +899,14 @@ end
 
 local _cached_parsed_result = nil
 local _cached_ics_content = nil
+local _cached_date = nil
 
-function GetParsedResultJson()
+function GetParsedResultJson(selectedDate)
+  -- If no selectedDate argument provided, use today
+  if not selectedDate then
+    selectedDate = os.date("%Y-%m-%d")
+  end
+
   local icsContent = ""
   if SKIN then
     local measure = SKIN:GetMeasure('MeasureEventParser')
@@ -703,7 +921,8 @@ function GetParsedResultJson()
     end
   end
 
-  if icsContent == _cached_ics_content and _cached_parsed_result then
+  -- Cache only if ICS content and date match
+  if icsContent == _cached_ics_content and _cached_parsed_result and selectedDate == _cached_date then
     return _cached_parsed_result
   end
 
@@ -713,12 +932,12 @@ function GetParsedResultJson()
   end
 
   local events = parseIcs(icsContent)
-  local today = os.date("%Y-%m-%d")
-  local todayEvents, upcomingEvents = filterEvents(events, today)
-  local result = formatOutput(todayEvents, upcomingEvents, today, 5)
+  local todayEvents, upcomingEvents = filterEvents(events, selectedDate)
+  local result = formatOutput(todayEvents, upcomingEvents, selectedDate, 5)
 
   _cached_ics_content = icsContent
   _cached_parsed_result = result
+  _cached_date = selectedDate
 
   return result
 end
