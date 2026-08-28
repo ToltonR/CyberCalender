@@ -35,8 +35,9 @@ function Initialize()
     currentYear = tonumber(os.date('%Y'))
     todayDay = tonumber(os.date('%d'))
 
-    -- Initialize selectedDate to today
-    selectedDate = os.date("%Y-%m-%d")
+    -- No date selected by default; GetSelectedDate() falls back to today for event display,
+    -- but the white "selected" circle only shows once the user actually clicks a date.
+    selectedDate = nil
 
     -- Debug: Log the initialization
     print('Calendar initialized: ' .. currentMonth .. '/' .. todayDay .. '/' .. currentYear)
@@ -221,8 +222,8 @@ function GoToToday()
     currentMonth = tonumber(os.date('%m'))
     currentYear = tonumber(os.date('%Y'))
     todayDay = tonumber(os.date('%d'))
-    -- Also set selected date to today
-    selectedDate = os.date("%Y-%m-%d")
+    -- Clear any selection so today's cell shows its plain cyan highlight, not the white "selected" circle
+    selectedDate = nil
 end
 
 -- Get current month name and year
@@ -234,6 +235,75 @@ function GetMonthYearString()
     local monthNames = {"January", "February", "March", "April", "May", "June",
                        "July", "August", "September", "October", "November", "December"}
     return monthNames[currentMonth] .. " " .. currentYear
+end
+
+-- ===============================================
+-- MONTH/YEAR PICKER (dropdown-style overlay)
+-- ===============================================
+local pickerOpen = false
+local pickerYear = nil
+
+local monthAbbrevs = {"JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"}
+
+-- Open/close the picker (toggled by clicking the month/year header)
+function ToggleMonthPicker()
+    if not currentMonth or not currentYear then
+        Initialize()
+    end
+    pickerOpen = not pickerOpen
+    if pickerOpen then
+        pickerYear = currentYear
+    end
+end
+
+function ClosePicker()
+    pickerOpen = false
+end
+
+function IsPickerOpen()
+    if pickerOpen then return 1 else return 0 end
+end
+
+-- Year being browsed inside the picker (independent of currentYear until a month is picked)
+function GetPickerYear()
+    return pickerYear or currentYear or tonumber(os.date('%Y'))
+end
+
+function PickerYearUp()
+    pickerYear = GetPickerYear() + 1
+end
+
+function PickerYearDown()
+    pickerYear = GetPickerYear() - 1
+end
+
+function GetMonthAbbrev(index)
+    index = tonumber(index) or 1
+    return monthAbbrevs[index] or ""
+end
+
+-- Highlight the month button matching the calendar's current month/year
+function GetMonthButtonColor(index)
+    index = tonumber(index) or 1
+    if not currentMonth or not currentYear then
+        Initialize()
+    end
+    if index == currentMonth and GetPickerYear() == currentYear then
+        return "0,200,255,255"  -- ColorCyan
+    end
+    return "255,255,255,255"  -- ColorWhite
+end
+
+-- Jump the calendar to the chosen month/year and close the picker
+function SelectMonth(index)
+    index = tonumber(index) or 1
+    if not currentYear then
+        Initialize()
+    end
+    currentMonth = index
+    currentYear = GetPickerYear()
+    selectedDate = nil
+    pickerOpen = false
 end
 
 -- Get the color for a day cell
@@ -417,6 +487,42 @@ function GetSelectedDateBG(index)
     end
 
     return "0,0,0,0"
+end
+
+-- Get the YYYY-MM-DD date a given calendar cell (0-41) displays
+function GetIndexDate(index)
+    index = tonumber(index) or 0
+
+    if not currentMonth or not currentYear then
+        Initialize()
+    end
+
+    local daysInMonth = GetDaysInMonth(currentMonth, currentYear)
+    local firstDayOfWeek = GetFirstDayOfWeek(currentMonth, currentYear)
+    local dayNum = index - firstDayOfWeek + 1
+
+    if dayNum >= 1 and dayNum <= daysInMonth then
+        return string.format("%04d-%02d-%02d", currentYear, currentMonth, dayNum)
+    elseif dayNum < 1 then
+        local prevMonth = currentMonth - 1
+        local prevYear = currentYear
+        if prevMonth < 1 then
+            prevMonth = 12
+            prevYear = prevYear - 1
+        end
+        local prevMonthDays = GetDaysInMonth(prevMonth, prevYear)
+        local actualDay = prevMonthDays + dayNum
+        return string.format("%04d-%02d-%02d", prevYear, prevMonth, actualDay)
+    else
+        local nextMonth = currentMonth + 1
+        local nextYear = currentYear
+        if nextMonth > 12 then
+            nextMonth = 1
+            nextYear = nextYear + 1
+        end
+        local actualDay = dayNum - daysInMonth
+        return string.format("%04d-%02d-%02d", nextYear, nextMonth, actualDay)
+    end
 end
 
 -- Parse ICS datetime format to readable format
@@ -639,6 +745,29 @@ function GetTodayEventTitle(index)
   end
 end
 
+-- Get today event calendar tag ("1" or "2") - actually for selected date
+function GetTodayEventTag(index)
+  index = tonumber(index) or 1
+  local selected = GetSelectedDate()
+  local result = GetParsedResultJson(selected)
+  if not result or not result.todayEvents then
+    return ""
+  end
+  local event = result.todayEvents[index]
+  if event then
+    return event.source or ""
+  else
+    return ""
+  end
+end
+
+-- Get pill color for a today event's source calendar
+function GetTodayEventTagColor(index)
+  local tag = GetTodayEventTag(index)
+  local varName = (tag == "2") and "ColorTag2" or "ColorTag1"
+  return SKIN:GetVariable(varName, "255,16,240,255")
+end
+
 -- ===============================================
 -- UPCOMING EVENTS FUNCTIONS (excluding today)
 -- ===============================================
@@ -694,6 +823,28 @@ function GetUpcomingEventTitle(index)
   end
 end
 
+-- Get upcoming event calendar tag ("1" or "2")
+function GetUpcomingEventTag(index)
+  index = tonumber(index) or 1
+  local result = GetParsedResultJson()
+  if not result or not result.upcomingEvents then
+    return ""
+  end
+  local event = result.upcomingEvents[index]
+  if event then
+    return event.source or ""
+  else
+    return ""
+  end
+end
+
+-- Get pill color for an upcoming event's source calendar
+function GetUpcomingEventTagColor(index)
+  local tag = GetUpcomingEventTag(index)
+  local varName = (tag == "2") and "ColorTag2" or "ColorTag1"
+  return SKIN:GetVariable(varName, "255,16,240,255")
+end
+
 -- ===============================================
 -- PARSER FUNCTIONS (from Parser.lua)
 -- ===============================================
@@ -735,9 +886,10 @@ local function addDaysToDate(dateStr, days)
   y, m, d = tonumber(y), tonumber(m), tonumber(d)
   d = d + days
 
-  -- Simple date math (good enough for ±1 days)
-  if d > 31 then
-    d = d - 31
+  -- Roll over using the actual day count of the month (handles 28/29/30/31)
+  local daysInMonth = GetDaysInMonth(m, y)
+  if d > daysInMonth then
+    d = d - daysInMonth
     m = m + 1
     if m > 12 then
       m = 1
@@ -749,7 +901,7 @@ local function addDaysToDate(dateStr, days)
       m = 12
       y = y - 1
     end
-    d = d + 31
+    d = d + GetDaysInMonth(m, y)
   end
 
   return string.format("%04d-%02d-%02d", y, m, d)
@@ -807,13 +959,14 @@ local function formatTimeRange(start, finish, isAllDay, startIsUtc, endIsUtc)
   return timeText, dateOffset
 end
 
-local function parseIcs(body)
+local function parseIcs(body, source)
   if not body then return {} end
   body = body:gsub("\r\n", "\n"):gsub("\r", "\n"):gsub("\n[ \t]", "")
   local events = {}
   for block in body:gmatch("BEGIN:VEVENT(.-)END:VEVENT") do
     if type(block) == "string" then
       local e = {}
+      e.source = source
       e.uid = trim(block:match("UID:([^\n\r]+)"))
       e.dtStartRaw = trim(block:match("DTSTART[^:]*:([^\n\r]+)"))
       e.dtEndRaw = trim(block:match("DTEND[^:]*:([^\n\r]+)"))
@@ -870,7 +1023,8 @@ local function slimEvent(e)
     dtEndDate = e.dtEndDate,
     timeText = e.timeText,
     description = e.description,
-    location = e.location
+    location = e.location,
+    source = e.source
   }
 end
 
@@ -900,6 +1054,58 @@ end
 local _cached_parsed_result = nil
 local _cached_ics_content = nil
 local _cached_date = nil
+local _cached_all_events = nil
+
+local function readMeasureString(measureName)
+  if not SKIN then return "" end
+  local measure = SKIN:GetMeasure(measureName)
+  if not measure then return "" end
+  if measure.GetStringValue then
+    return measure:GetStringValue() or ""
+  elseif measure.GetString then
+    return measure:GetString() or ""
+  else
+    return tostring(measure:GetValue() or "")
+  end
+end
+
+-- Returns the merged, unfiltered event list from both calendars (cached until either feed changes)
+local function GetAllParsedEvents()
+  local ics1 = readMeasureString('MeasureEventParser')
+  local ics2 = readMeasureString('MeasureEventParser2')
+  local combinedIcs = ics1 .. "\n<<<SPLIT>>>\n" .. ics2
+
+  if combinedIcs == _cached_ics_content and _cached_all_events then
+    return _cached_all_events, combinedIcs
+  end
+
+  local events = {}
+  for _, e in ipairs(parseIcs(ics1, "1")) do table.insert(events, e) end
+  for _, e in ipairs(parseIcs(ics2, "2")) do table.insert(events, e) end
+
+  _cached_ics_content = combinedIcs
+  _cached_all_events = events
+
+  return events, combinedIcs
+end
+
+-- Check whether the date shown at a calendar cell (index 0-41) has an event from the given source ("1" or "2")
+function HasEventOnDay(index, source)
+  local dateStr = GetIndexDate(index)
+  local events = GetAllParsedEvents()
+  for _, e in ipairs(events) do
+    if e.dtStartDate == dateStr and e.source == tostring(source) then
+      return 1
+    end
+  end
+  return 0
+end
+
+-- Color for a day-cell event dot, based on which calendar it belongs to
+function GetEventDotColor(source)
+  local varName = (tostring(source) == "2") and "ColorTag2" or "ColorTag1"
+  return SKIN:GetVariable(varName, "255,16,240,255")
+end
 
 function GetParsedResultJson(selectedDate)
   -- If no selectedDate argument provided, use today
@@ -907,35 +1113,22 @@ function GetParsedResultJson(selectedDate)
     selectedDate = os.date("%Y-%m-%d")
   end
 
-  local icsContent = ""
-  if SKIN then
-    local measure = SKIN:GetMeasure('MeasureEventParser')
-    if measure then
-      if measure.GetStringValue then
-        icsContent = measure:GetStringValue() or ""
-      elseif measure.GetString then
-        icsContent = measure:GetString() or ""
-      else
-        icsContent = tostring(measure:GetValue() or "")
-      end
-    end
-  end
+  local events, combinedIcs = GetAllParsedEvents()
 
-  -- Cache only if ICS content and date match
-  if icsContent == _cached_ics_content and _cached_parsed_result and selectedDate == _cached_date then
+  -- Cache only if date matches (event list itself is already cached by GetAllParsedEvents)
+  if _cached_parsed_result and selectedDate == _cached_date and combinedIcs == _cached_ics_content then
     return _cached_parsed_result
   end
 
-  if icsContent == "" then
-    print('WARNING: No ICS content from MeasureEventParser')
+  if #events == 0 then
+    print('WARNING: No ICS content from MeasureEventParser/MeasureEventParser2')
     return nil
   end
 
-  local events = parseIcs(icsContent)
   local todayEvents, upcomingEvents = filterEvents(events, selectedDate)
   local result = formatOutput(todayEvents, upcomingEvents, selectedDate, 5)
 
-  _cached_ics_content = icsContent
+  _cached_ics_content = combinedIcs
   _cached_parsed_result = result
   _cached_date = selectedDate
 
