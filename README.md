@@ -24,7 +24,7 @@ A sleek, dark-themed calendar skin for Rainmeter that integrates with Google Cal
 - **Week**: 7 day cards with up to 3 events each; click a card to open that day.
 - **Day**: "now" card (clock, time to next event or time left in current one, day progress, free time left) and a timeline of events with **Free** windows between them.
 - Dark blue palette and rounded cards; all colours live in `[Variables]` of `Calendar.ini`.
-- Times are converted from UTC to your system time zone (previously hard-coded IST).
+- Times are converted from UTC to your time zone (Windows time zone, or `UtcOffsetHours` if set); previously hard-coded IST.
 - Double-click a day in Month to open it in Day.
 
 Settings in `[Variables]`: `WeekStart` (0 = Sunday, 1 = Monday), `DayStart` / `DayEnd` (hours of the window used for free time), `MinGap` (minimum free window, minutes).
@@ -48,7 +48,7 @@ Settings in `[Variables]`: `WeekStart` (0 = Sunday, 1 = Monday), `DayStart` / `D
 
 ### 📆 Google Calendar Integration
 - Fetches events from Google Calendar via ICS feed
-- Proper UTC to IST timezone conversion
+- UTC and `TZID` times are converted to your time zone
 - Supports both all-day events and timed events
 - Real-time event filtering based on selected date
 
@@ -132,13 +132,13 @@ CyberCalender/
 ### Event Parsing (Lua)
 - **parseIcs()**: Parses RFC 5545 ICS format
 - **filterEvents()**: Filters events by date
-- **convertUtcToIst()**: Converts UTC times to IST with date offset tracking
+- **parseDt() / toDisplay()**: Convert UTC and `TZID` times to the display time zone
 - **GetParsedResultJson(selectedDate)**: Returns events for a specific date
 
 ### Timezone Handling
-- Automatically converts UTC times to IST (India Standard Time)
-- Handles date changes due to timezone conversion
-- Properly filters events by local date after conversion
+- Event times in UTC (`...Z`) and with a known `TZID` (Moscow, Yekaterinburg, Kolkata, etc., see `ZONES` in `Calendar.lua`) are converted to the display time zone
+- Display time zone = Windows time zone, unless `UtcOffsetHours` (for example `5` for Tyumen) is set in `@Resources\Variables.inc`
+- The "now" clock in the Day view uses the same time zone, so it always matches the events
 
 ## Customization
 
@@ -169,9 +169,9 @@ Edit `[MeterBG]` to change the size and position of the calendar window.
 4. Reload the skin: Right-click → Reload
 
 ### Dates showing incorrect times?
-1. Verify your system timezone is set to IST
-2. Check that the calendar events are stored in UTC
-3. Manually adjust the timezone offset in the Lua script if needed
+1. Compare the Windows time zone with the one in Google Calendar (a wrong Windows time zone shifts every event)
+2. Either fix the Windows time zone, or set `UtcOffsetHours` (for example `5`) in `@Resources\Variables.inc`
+3. Reload the skin
 
 ### Calendar not updating?
 1. Increase the UpdateRate in `[MeasureEventParser]` (currently 300 seconds)

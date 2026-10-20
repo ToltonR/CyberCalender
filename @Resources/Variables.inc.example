@@ -6,3 +6,7 @@
 [Variables]
 GoogleCalendarICS1=https://calendar.google.com/calendar/ical/YOUR_EMAIL_HERE%40gmail.com/private-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX/basic.ics
 GoogleCalendarICS2=https://calendar.google.com/calendar/ical/YOUR_SECOND_EMAIL_HERE%40gmail.com/private-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX/basic.ics
+
+; Optional: show everything in a fixed UTC offset (hours, e.g. 5 or 5.5) instead of the Windows time zone.
+; Leave commented out to follow the Windows time zone.
+;UtcOffsetHours=5

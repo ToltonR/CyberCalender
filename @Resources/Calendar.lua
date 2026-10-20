@@ -22,9 +22,14 @@ local function color(name)
     return SKIN:GetVariable(name, "255,255,255,255")
 end
 
+-- число из переменной .ini; если переменной нет или она пустая - значение по умолчанию
+local function num(name, default)
+    return tonumber(SKIN:GetVariable(name, "")) or default
+end
+
 -- 0 = неделя с воскресенья, 1 = с понедельника (переменная WeekStart в .ini)
 local function weekStart()
-    return tonumber(SKIN:GetVariable("WeekStart", "0")) or 0
+    return num("WeekStart", 0)
 end
 
 -- ===============================================
@@ -35,8 +40,21 @@ local function fmtDate(y, m, d)
     return string.format("%04d-%02d-%02d", y, m, d)
 end
 
+-- Дата и время для эпохи в поясе отображения: UtcOffsetHours из .ini (например 5 для Тюмени),
+-- а если он пуст - пояс Windows (с учётом летнего времени)
+local function dateTable(epoch)
+    local off = num("UtcOffsetHours", nil)
+    if off then return os.date("!*t", epoch + math.floor(off * 3600)) end
+    return os.date("*t", epoch)
+end
+
+local function nowTable()
+    return dateTable(os.time())
+end
+
 local function today()
-    return os.date("%Y-%m-%d")
+    local t = nowTable()
+    return fmtDate(t.year, t.month, t.day)
 end
 
 local function parts(s)
@@ -62,6 +80,10 @@ local function focus()
     return selectedDate or today()
 end
 
+local function focusIsToday()
+    return focus() == today()
+end
+
 local function weekFirst(date)
     return addDays(date, -((dow(date) - weekStart()) % 7))
 end
@@ -71,10 +93,19 @@ local function shortDate(s)
     return MONTHS_SHORT[m] .. " " .. d
 end
 
--- дата, которую показывает ячейка сетки (0-41)
+-- дата, которую показывает ячейка сетки (0-41); даты месяца считаем один раз и запоминаем
+local gridCache = {}
 local function cellDate(index)
-    local first = fmtDate(currentYear, currentMonth, 1)
-    return addDays(first, (tonumber(index) or 0) - (dow(first) - weekStart()) % 7)
+    local key = currentYear .. "-" .. currentMonth .. "-" .. weekStart()
+    local grid = gridCache[key]
+    if not grid then
+        local first = fmtDate(currentYear, currentMonth, 1)
+        local start = addDays(first, -((dow(first) - weekStart()) % 7))
+        grid = {}
+        for i = 0, 41 do grid[i] = addDays(start, i) end
+        gridCache[key] = grid
+    end
+    return grid[tonumber(index) or 0]
 end
 
 -- ===============================================
@@ -99,18 +130,34 @@ local function unescape(s)
     return (s:gsub("\\n", " "):gsub("\\N", " "):gsub("\\,", ","):gsub("\\;", ";"):gsub("\\\\", "\\"))
 end
 
--- UTC-время из ICS -> локальные дата и "HH:MM" (смещение берём из системы, а не зашитое)
-local function utcToLocal(date, time)
-    local y, m, d = parts(date)
-    local hh, mi, ss = time:match("^(%d+):(%d+):(%d+)$")
-    local asLocal = os.time{year = y, month = m, day = d, hour = tonumber(hh), min = tonumber(mi), sec = tonumber(ss)}
-    local offset = os.time(os.date("*t", asLocal)) - os.time(os.date("!*t", asLocal))
-    local t = os.date("*t", asLocal + offset)
+-- UTC-эпоха по полям даты/времени (без участия часового пояса Windows)
+local function timegm(y, m, d, hh, mi, ss)
+    if m <= 2 then y = y - 1 end
+    local era = math.floor(y / 400)
+    local yoe = y - era * 400
+    local doy = math.floor((153 * ((m + 9) % 12) + 2) / 5) + d - 1
+    local doe = yoe * 365 + math.floor(yoe / 4) - math.floor(yoe / 100) + doy
+    return (era * 146097 + doe - 719468) * 86400 + hh * 3600 + mi * 60 + ss
+end
+
+-- эпоха -> дата "YYYY-MM-DD" и время "HH:MM" в поясе отображения
+local function toDisplay(epoch)
+    local t = dateTable(epoch)
     return fmtDate(t.year, t.month, t.day), string.format("%02d:%02d", t.hour, t.min)
 end
 
--- "20251021" (весь день) | "20251021T123000Z" (UTC) | "20251021T123000" (локальное)
-local function parseDt(raw)
+-- смещения (часы от UTC) для TZID из ICS; у этих поясов нет перехода на летнее время.
+-- Неизвестный TZID считаем «плавающим» временем (показываем как записано).
+local ZONES = {
+    ["UTC"] = 0, ["Etc/UTC"] = 0, ["GMT"] = 0,
+    ["Europe/Moscow"] = 3, ["Europe/Minsk"] = 3, ["Europe/Samara"] = 4,
+    ["Asia/Yekaterinburg"] = 5, ["Asia/Tashkent"] = 5, ["Asia/Omsk"] = 6,
+    ["Asia/Novosibirsk"] = 7, ["Asia/Krasnoyarsk"] = 7,
+    ["Asia/Kolkata"] = 5.5, ["Asia/Calcutta"] = 5.5,
+}
+
+-- "20251021" (весь день) | "20251021T123000Z" (UTC) | "20251021T123000" + TZID | без TZID (как записано)
+local function parseDt(raw, tzid)
     if not raw then return nil end
     raw = trim(raw)
     local y, m, d = raw:match("^(%d%d%d%d)(%d%d)(%d%d)$")
@@ -119,12 +166,14 @@ local function parseDt(raw)
     end
     local y2, m2, d2, hh, mi, ss, z = raw:match("^(%d%d%d%d)(%d%d)(%d%d)T(%d%d)(%d%d)(%d%d)(Z?)$")
     if not y2 then return nil end
-    local date = y2 .. "-" .. m2 .. "-" .. d2
-    if z == "Z" then
-        local ld, lt = utcToLocal(date, hh .. ":" .. mi .. ":" .. ss)
-        return {date = ld, time = lt}
+    local zoneOffset = (z == "Z") and 0 or ZONES[tzid or ""]
+    if zoneOffset then
+        local epoch = timegm(tonumber(y2), tonumber(m2), tonumber(d2), tonumber(hh), tonumber(mi), tonumber(ss))
+                      - math.floor(zoneOffset * 3600)
+        local date, time = toDisplay(epoch)
+        return {date = date, time = time}
     end
-    return {date = date, time = hh .. ":" .. mi}
+    return {date = y2 .. "-" .. m2 .. "-" .. d2, time = hh .. ":" .. mi}
 end
 
 local function parseIcs(body, source)
@@ -136,9 +185,12 @@ local function parseIcs(body, source)
         local function field(key)
             return block:match("\n" .. key .. "[^:\n]*:([^\n]*)")
         end
-        local s = parseDt(field("DTSTART"))
+        local function tzidOf(key)
+            return (block:match("\n" .. key .. "([^:\n]*):") or ""):match("TZID=([^;:]+)")
+        end
+        local s = parseDt(field("DTSTART"), tzidOf("DTSTART"))
         if s then
-            local e = parseDt(field("DTEND"))
+            local e = parseDt(field("DTEND"), tzidOf("DTEND"))
             local ev = {
                 source = source,
                 title = trim(unescape(field("SUMMARY") or "")),
@@ -236,15 +288,18 @@ local function getList(list)
     if list == 2 then return upcoming(focus(), 3) end
     return eventsOn(focus())
 end
-local LIST_VIEW = {[1] = VIEW_MONTH, [2] = VIEW_MONTH}
+
+local function evAt(list, i)
+    return getList(tonumber(list))[tonumber(i)]
+end
 
 -- ===============================================
 -- ЖИЗНЕННЫЙ ЦИКЛ И НАВИГАЦИЯ
 -- ===============================================
 
 function Initialize()
-    currentMonth = tonumber(os.date("%m"))
-    currentYear = tonumber(os.date("%Y"))
+    local n = nowTable()
+    currentMonth, currentYear = n.month, n.year
 end
 
 function Update()
@@ -256,7 +311,8 @@ function SetView(v)
     v = tonumber(v) or VIEW_MONTH
     -- уходим из месяца, который не текущий, и дата не выбрана: берём 1-е число показанного месяца
     if v ~= VIEW_MONTH and view == VIEW_MONTH and not selectedDate then
-        if currentMonth ~= tonumber(os.date("%m")) or currentYear ~= tonumber(os.date("%Y")) then
+        local n = nowTable()
+        if currentMonth ~= n.month or currentYear ~= n.year then
             selectedDate = fmtDate(currentYear, currentMonth, 1)
         end
     end
@@ -284,8 +340,8 @@ function NextPeriod() shift(1) end
 
 function GoToToday()
     selectedDate = nil
-    currentMonth = tonumber(os.date("%m"))
-    currentYear = tonumber(os.date("%Y"))
+    local n = nowTable()
+    currentMonth, currentYear = n.month, n.year
     pickerOpen = false
 end
 
@@ -435,10 +491,8 @@ function ToggleMonthPicker()
     end
 end
 
-function ClosePicker() pickerOpen = false end
-
 function GetPickerYear()
-    return pickerYear or currentYear or tonumber(os.date("%Y"))
+    return pickerYear or currentYear or nowTable().year
 end
 
 function PickerYearUp() pickerYear = GetPickerYear() + 1 end
@@ -473,35 +527,28 @@ function SelectMonth(i)
 end
 
 -- ===============================================
--- СПИСКИ СОБЫТИЙ (Month: списки 1 и 2, Day: список 3)
+-- СПИСКИ СОБЫТИЙ в Month (1 = выбранный день, 2 = ближайшие)
 -- ===============================================
 
 function HidEv(list, i)
-    list = tonumber(list)
-    if view ~= LIST_VIEW[list] then return 1 end
-    return getList(list)[tonumber(i)] and 0 or 1
+    if view ~= VIEW_MONTH then return 1 end
+    return evAt(list, i) and 0 or 1
 end
 
 function EvTime(list, i)
-    list = tonumber(list)
-    local e = getList(list)[tonumber(i)]
+    local e = evAt(list, i)
     if not e then return "" end
-    if list == 2 then return shortDate(e.startDate) .. ", " .. (e.allDay and "All day" or e.startTime) end
+    if tonumber(list) == 2 then return shortDate(e.startDate) .. ", " .. (e.allDay and "All day" or e.startTime) end
     return timeText(e)
 end
 
 function EvTitle(list, i)
-    local e = getList(tonumber(list))[tonumber(i)]
+    local e = evAt(list, i)
     return e and e.title or ""
 end
 
-function EvLoc(list, i)
-    local e = getList(tonumber(list))[tonumber(i)]
-    return e and e.location or ""
-end
-
 function EvDot(list, i)
-    local e = getList(tonumber(list))[tonumber(i)]
+    local e = evAt(list, i)
     return e and sourceColor(e.source) or CLEAR
 end
 
@@ -539,22 +586,13 @@ local function durText(m)
 end
 
 local function nowMin()
-    return tonumber(os.date("%H")) * 60 + tonumber(os.date("%M"))
+    local t = nowTable()
+    return t.hour * 60 + t.min
 end
 
-local function dayWindow()   -- рабочее окно, в котором ищем свободное время (минуты от 00:00)
-    local s = (tonumber(SKIN:GetVariable("DayStart", "8")) or 8) * 60
-    local e = (tonumber(SKIN:GetVariable("DayEnd", "22")) or 22) * 60
-    return s, e
-end
-
-local function minGap()
-    return tonumber(SKIN:GetVariable("MinGap", "30")) or 30
-end
-
--- окна длиннее этого (минуты) не показываем: скорее всего это сон или пустой день
-local function maxGap()
-    return tonumber(SKIN:GetVariable("MaxFreeGap", "480")) or 480
+-- рабочее окно, в котором ищем свободное время (минуты от 00:00)
+local function dayWindow()
+    return num("DayStart", 8) * 60, num("DayEnd", 22) * 60
 end
 
 -- слоты дня по порядку: события на весь день, затем timed-события и свободные окна между ними
@@ -562,7 +600,8 @@ end
 local function daySlots(date)
     if slotCache[date] then return slotCache[date] end
     local ws, we = dayWindow()
-    local gapMin, gapMax = minGap(), maxGap()
+    -- свободные окна короче MinGap не показываем, а длиннее MaxFreeGap (минуты) тоже: скорее всего это сон
+    local gapMin, gapMax = num("MinGap", 30), num("MaxFreeGap", 480)
     local slots, timed = {}, {}
     local function addGap(from, to)
         local len = to - from
@@ -598,7 +637,7 @@ end
 
 -- "past" | "now" | "future": только для сегодняшнего дня и событий со временем
 local function slotState(sl)
-    if focus() ~= today() or not sl.s then return "future" end
+    if not focusIsToday() or not sl.s then return "future" end
     local n = nowMin()
     if sl.en <= n then return "past" end
     if sl.s <= n then return "now" end
@@ -658,33 +697,27 @@ function SlotTitleColor(k)
     return color("ColorText")
 end
 
-function HidMore()
-    if view == VIEW_DAY and #daySlots(focus()) > DAY_SLOTS then return 0 end
-    return 1
+-- сколько слотов не поместилось в Day
+local function hiddenSlots()
+    if view ~= VIEW_DAY then return 0 end
+    return math.max(0, #daySlots(focus()) - DAY_SLOTS)
 end
 
-function DayMore()
-    local n = #daySlots(focus())
-    if view == VIEW_DAY and n > DAY_SLOTS then return "+" .. (n - DAY_SLOTS) .. " more" end
-    return ""
-end
+function HidMore() return hiddenSlots() > 0 and 0 or 1 end
+function DayMore() return hiddenSlots() > 0 and ("+" .. hiddenSlots() .. " more") or "" end
 
 -- ===============================================
 -- АДАПТИВНЫЙ РАЗМЕР: высота окна и положение блоков зависят от числа событий
 -- ===============================================
 
-local function selRows() return math.min(3, #eventsOn(focus())) end
-local function selH()
-    local r = selRows()
-    if r == 0 then return 38 end
-    return 42 + 22 * r
+-- высота карточки Month: шапка + по 22 px на каждую из (до 3) строк; пустая карточка = emptyH
+local function cardH(count, emptyH)
+    local rows = math.min(3, count)
+    return rows == 0 and emptyH or 42 + 22 * rows
 end
+local function selH() return cardH(#eventsOn(focus()), 38) end
 local function upRows() return #upcoming(focus(), 3) end
-local function upH()
-    local r = upRows()
-    if r == 0 then return 0 end
-    return 42 + 22 * r
-end
+local function upH() return cardH(upRows(), 0) end
 local function upY() return 388 + selH() + 8 end
 
 function SelCardH() return selH() end
@@ -735,19 +768,19 @@ local function nowAndNext()
 end
 
 function BannerBig()
-    if focus() == today() then return fmtMin(nowMin()) end
+    if focusIsToday() then return fmtMin(nowMin()) end
     if #eventsOn(focus()) == 0 then return "Free day" end
     return durText(freeTotal(focus()))
 end
 
 function BannerSub()
-    local left = (focus() == today()) and freeTotal(focus(), nowMin()) or freeTotal(focus())
+    local left = (focusIsToday()) and freeTotal(focus(), nowMin()) or freeTotal(focus())
     if left <= 0 then return "" end
-    return durText(left) .. (focus() == today() and " free left" or " free time")
+    return durText(left) .. (focusIsToday() and " free left" or " free time")
 end
 
 function BannerStatus()
-    if focus() ~= today() then
+    if not focusIsToday() then
         local ws, we = dayWindow()
         return "Free " .. fmtMin(ws) .. " - " .. fmtMin(we)
     end
@@ -761,7 +794,7 @@ function BannerStatus()
 end
 
 function BannerTitle()
-    if focus() ~= today() then return plural(#eventsOn(focus())) end
+    if not focusIsToday() then return plural(#eventsOn(focus())) end
     local cur, nxt = nowAndNext()
     local e = cur or nxt
     if e then return e.e.title end
@@ -770,14 +803,14 @@ end
 
 -- прогресс рабочего окна дня (только сегодня); ширина дорожки 320
 function BannerBarW()
-    if focus() ~= today() then return 1 end
+    if not focusIsToday() then return 1 end
     local ws, we = dayWindow()
     local p = (nowMin() - ws) / (we - ws)
     return math.max(1, math.min(1, p) * 320)
 end
 
 function BannerBarColor()
-    return focus() == today() and color("ColorAccent") or CLEAR
+    return focusIsToday() and color("ColorAccent") or CLEAR
 end
 
 -- ===============================================

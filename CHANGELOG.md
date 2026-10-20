@@ -20,11 +20,14 @@ Everything below is what was added or changed in the fork.
 
 ### Design
 - New dark blue palette with one soft accent colour, rounded cards, rounded day cells and a segmented tab control.
+- Code cleanup: shared helpers for settings and date/time, cached month grid dates, removed unused functions.
 - Slightly larger fonts and higher contrast of secondary text.
 - All colours are variables in `[Variables]` and are read by the Lua script (no colours hard-coded in Lua any more).
 
 ### Fixes and cleanup
-- Event times are converted from UTC to the **system time zone** (was hard-coded to IST, +5:30).
+- Event times are converted from UTC to your time zone (was hard-coded to IST, +5:30): the Windows time zone, or a fixed `UtcOffsetHours` from `Variables.inc` (useful when the PC time zone differs from the calendar's).
+- Events with `TZID` (e.g. `Europe/Moscow`, `Asia/Yekaterinburg`) are converted correctly instead of being shown as written.
+- The clock and "today" in the skin use the same time zone as events, so they always agree.
 - Multi-day all-day events are shown on every day they cover.
 - ICS parsing: escaped characters (`\,` `\;` `\n`), fields with parameters, locations.
 - Private calendar links moved out of `Calendar.ini` into the gitignored `@Resources/Variables.inc`.
