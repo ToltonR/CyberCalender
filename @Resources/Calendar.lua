@@ -115,6 +115,7 @@ end
 local events = {}
 local rawA, rawB = nil, nil
 local dayCache, upCache, slotCache = {}, {}, {}
+local shownKey, shown   -- кэш списка слотов для показа (см. shownSlots)
 
 local function readMeasure(name)
     local m = SKIN:GetMeasure(name)
@@ -227,7 +228,7 @@ local function reload()
     for _, e in ipairs(parseIcs(a, "1")) do events[#events + 1] = e end
     for _, e in ipairs(parseIcs(b, "2")) do events[#events + 1] = e end
     table.sort(events, sortEvents)
-    dayCache, upCache, slotCache = {}, {}, {}
+    dayCache, upCache, slotCache, shownKey = {}, {}, {}, nil
 end
 
 local function eventsOn(date)
@@ -631,8 +632,31 @@ local function daySlots(date)
     return slots
 end
 
+-- Слоты для показа. Сегодня прошедшее свободное время не показываем, а текущее окно
+-- начинаем с «сейчас»; если до конца окна осталось меньше MinGap, оно тоже скрывается.
+-- Список пересчитывается раз в минуту (ключ = дата + минута).
+local function shownSlots()
+    local date = focus()
+    local now = focusIsToday() and nowMin() or -1
+    local key = date .. ":" .. now
+    if key == shownKey then return shown end
+    local out = {}
+    for _, sl in ipairs(daySlots(date)) do
+        if sl.kind == "gap" and now >= 0 then
+            local from = math.max(sl.s, now)
+            if sl.en - from >= num("MinGap", 30) then
+                out[#out + 1] = {kind = "gap", s = from, en = sl.en}
+            end
+        else
+            out[#out + 1] = sl
+        end
+    end
+    shownKey, shown = key, out
+    return out
+end
+
 local function slotAt(k)
-    return daySlots(focus())[tonumber(k)]
+    return shownSlots()[tonumber(k)]
 end
 
 -- "past" | "now" | "future": только для сегодняшнего дня и событий со временем
@@ -700,7 +724,7 @@ end
 -- сколько слотов не поместилось в Day
 local function hiddenSlots()
     if view ~= VIEW_DAY then return 0 end
-    return math.max(0, #daySlots(focus()) - DAY_SLOTS)
+    return math.max(0, #shownSlots() - DAY_SLOTS)
 end
 
 function HidMore() return hiddenSlots() > 0 and 0 or 1 end
@@ -736,7 +760,7 @@ function PanelH()
     elseif view == VIEW_WEEK then
         h = 660
     else
-        local n = math.min(#daySlots(focus()), DAY_SLOTS)
+        local n = math.min(#shownSlots(), DAY_SLOTS)
         h = (n == 0) and 250 or (200 + (n - 1) * 51 + 45 + 58)
     end
     if pickerOpen then h = math.max(h, 440) end   -- пикер месяца должен помещаться

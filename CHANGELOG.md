@@ -11,7 +11,7 @@ Everything below is what was added or changed in the fork.
 - **Day view**
   - "Now" card: current time, time until the next event (or time left in the current one), free time left today, progress bar of the day.
   - Timeline of events with **free windows** ("Free, 1h") between them. The current event is highlighted, past ones are dimmed.
-  - Free windows longer than 8 hours are not shown (most likely sleep). Other days show total free time instead of the clock.
+  - Free windows longer than 8 hours are not shown (most likely sleep). Today, free time that has already passed is hidden and the current window starts from "now". Other days show total free time instead of the clock.
 - **Week view**: 7 day cards with up to 3 events each and "+N more"; click a card to open that day.
 - **Adaptive height**: the panel shrinks in Day and Month when there are few events.
 - **Month view**: double-click a day to open it in Day; event dots are centred and coloured per calendar.
