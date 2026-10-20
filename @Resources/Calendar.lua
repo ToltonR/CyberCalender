@@ -803,13 +803,19 @@ function BannerSub()
     return durText(left) .. (focusIsToday() and " free left" or " free time")
 end
 
+-- сколько свободного времени за весь сегодняшний день (с учётом уже прошедшего)
+function BannerFreeTotal()
+    if not focusIsToday() then return "" end
+    return "Free today " .. durText(freeTotal(focus()))
+end
+
 function BannerStatus()
     if not focusIsToday() then
         local ws, we = dayWindow()
         return "Free " .. fmtMin(ws) .. " - " .. fmtMin(we)
     end
     local cur, nxt, n = nowAndNext()
-    if cur then return "In progress, " .. durText(cur.en - n) .. " left" end
+    if cur then return "Now, " .. durText(cur.en - n) .. " left" end
     if nxt then
         if nxt.s - n < 1 then return "Starting now" end
         return "Next in " .. durText(nxt.s - n)

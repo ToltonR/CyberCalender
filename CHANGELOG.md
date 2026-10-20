@@ -9,7 +9,7 @@ Everything below is what was added or changed in the fork.
 - Before / After screenshots in the README (`docs/`).
 - **Tabs Day / Week / Month** (Day is the default). Arrows move by 1 day / 7 days / 1 month.
 - **Day view**
-  - "Now" card: current time, time until the next event (or time left in the current one), free time left today, progress bar of the day.
+  - "Now" card: current time, time until the next event (or time left in the current one), free time left today, progress bar of the day, total free time of the whole day (top right).
   - Timeline of events with **free windows** ("Free, 1h") between them. The current event is highlighted, past ones are dimmed.
   - Free windows longer than 8 hours are not shown (most likely sleep). Today, free time that has already passed is hidden and the current window starts from "now". Other days show total free time instead of the clock.
 - **Week view**: 7 day cards with up to 3 events each and "+N more"; click a card to open that day.
