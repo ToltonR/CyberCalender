@@ -21,7 +21,7 @@ Everything below is what was added or changed in the fork.
 ### Design
 - New dark blue palette with one soft accent colour, rounded cards, rounded day cells and a segmented tab control.
 - Code cleanup: shared helpers for settings and date/time, cached month grid dates, removed unused functions.
-- Slightly larger fonts and higher contrast of secondary text.
+- Larger fonts (times, titles, free-time labels) and brighter secondary text for readability.
 - All colours are variables in `[Variables]` and are read by the Lua script (no colours hard-coded in Lua any more).
 
 ### Fixes and cleanup

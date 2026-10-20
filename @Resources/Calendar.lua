@@ -820,7 +820,7 @@ function BannerStatus()
         if nxt.s - n < 1 then return "Starting now" end
         return "Next in " .. durText(nxt.s - n)
     end
-    return "No more events today"
+    return "Done for today"
 end
 
 function BannerTitle()
