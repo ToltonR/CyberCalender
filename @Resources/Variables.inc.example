@@ -3,5 +3,6 @@
 ;
 ; To get a URL: Google Calendar > Settings > [pick a calendar] > Integrate calendar
 ;               > "Secret address in iCal format"
+[Variables]
 GoogleCalendarICS1=https://calendar.google.com/calendar/ical/YOUR_EMAIL_HERE%40gmail.com/private-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX/basic.ics
 GoogleCalendarICS2=https://calendar.google.com/calendar/ical/YOUR_SECOND_EMAIL_HERE%40gmail.com/private-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX/basic.ics

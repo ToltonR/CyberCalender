@@ -1,2 +1,3 @@
-@Resources/Variables.inc
 Calendar.ini.bak
+*.bak
+@Resources/Variables.inc

@@ -1,8 +1,22 @@
 # CyberCalendar - Rainmeter Skin
 
+> Fork of [Gourav2000/CyberCalender](https://github.com/Gourav2000/CyberCalender). See [CHANGELOG.md](CHANGELOG.md) for everything changed in this fork.
+
 A sleek, dark-themed calendar skin for Rainmeter that integrates with Google Calendar to display your events directly on your desktop.
 
-## Features
+## What's new in 6.0
+
+- Tabs **Month / Week / Day**; arrows move by month / 7 days / 1 day.
+- **Week**: 7 day cards with up to 3 events each; click a card to open that day.
+- **Day**: "now" card (clock, time to next event or time left in current one, day progress, free time left) and a timeline of events with **Free** windows between them.
+- Dark blue palette and rounded cards; all colours live in `[Variables]` of `Calendar.ini`.
+- Times are converted from UTC to your system time zone (previously hard-coded IST).
+- Double-click a day in Month to open it in Day.
+
+Settings in `[Variables]`: `WeekStart` (0 = Sunday, 1 = Monday), `DayStart` / `DayEnd` (hours of the window used for free time), `MinGap` (minimum free window, minutes).
+`Calendar.ini` is long because every meter is spelled out; the old version is kept as `Calendar.ini.bak` / `Calendar.lua.bak`.
+
+## Features (v5 description, still mostly valid)
 
 ### 📅 Calendar Grid
 - Full month view with 6 weeks × 7 days layout
@@ -52,15 +66,10 @@ A sleek, dark-themed calendar skin for Rainmeter that integrates with Google Cal
      C:\Users\[YourUsername]\Documents\Rainmeter\Skins\
      ```
 
-2. **Configure Google Calendar ICS URL**
-   - Open `Calendar.ini`
-   - Find the line: `GoogleCalendarICS=https://...`
-   - Replace with your Google Calendar ICS feed URL
-   - To get your ICS URL:
-     1. Go to Google Calendar settings
-     2. Select your calendar
-     3. Scroll to "Calendar Address"
-     4. Click on the ICS link to copy the URL
+2. **Configure Google Calendar ICS URLs**
+   - Copy `@Resources\Variables.inc.example` to `@Resources\Variables.inc` (it is gitignored, so your private links are never committed)
+   - Set `GoogleCalendarICS1` (and optionally `GoogleCalendarICS2`) to your feed URLs
+   - To get an ICS URL: Google Calendar > Settings > pick a calendar > Integrate calendar > "Secret address in iCal format"
 
 3. **Load the Skin**
    - Open Rainmeter
@@ -89,9 +98,11 @@ A sleek, dark-themed calendar skin for Rainmeter that integrates with Google Cal
 
 ```
 CyberCalender/
-├── Calendar.ini          # Main skin configuration
+├── Calendar.ini          # Main skin configuration (meters and styles)
+├── CHANGELOG.md          # What changed compared to upstream
 ├── @Resources/
-│   ├── Calendar.lua      # Calendar grid logic and event parsing
+│   ├── Calendar.lua      # Views, event parsing, free-time logic
+│   ├── Variables.inc     # Your private ICS URLs (gitignored, create from the .example)
 │   └── Parser.lua        # Reference ICS parser (not used)
 └── README.md             # This file
 ```
@@ -173,8 +184,7 @@ Potential features for future versions:
 
 - Limited to displaying 5 upcoming events (configurable in code)
 - ICS feed must be publicly accessible
-- Timezone conversion supports UTC → IST (can be adapted for other timezones)
-- No recurring event expansion (shows as single entries)
+- No recurring event expansion (RRULE events show only once, on their first date)
 
 ## Credits
 
