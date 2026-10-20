@@ -1,225 +1,126 @@
-# CyberCalendar - Rainmeter Skin
+<div align="center">
 
-> Fork of [Gourav2000/CyberCalender](https://github.com/Gourav2000/CyberCalender). See [CHANGELOG.md](CHANGELOG.md) for everything changed in this fork.
+# CyberCalendar
 
-A sleek, dark-themed calendar skin for Rainmeter that integrates with Google Calendar to display your events directly on your desktop.
+**A dark, rounded Google Calendar skin for [Rainmeter](https://www.rainmeter.net/) with Day, Week and Month views, a live "now" card and a free-time timeline.**
 
-## Screenshots
+![Rainmeter](https://img.shields.io/badge/Rainmeter-4.5%2B-1f6feb?style=flat-square)
+![Platform](https://img.shields.io/badge/Windows-10%20%7C%2011-0078d4?style=flat-square&logo=windows&logoColor=white)
+![Lua](https://img.shields.io/badge/Lua-5.1-2c2d72?style=flat-square&logo=lua&logoColor=white)
+![Google Calendar](https://img.shields.io/badge/Google%20Calendar-ICS-4285f4?style=flat-square&logo=googlecalendar&logoColor=white)
+![Fork](https://img.shields.io/badge/fork%20of-Gourav2000%2FCyberCalender-6e7681?style=flat-square&logo=github)
 
-**Before** (original skin by Gourav2000):
+<br>
 
-<img src="Screenshot.png" alt="Original CyberCalendar" width="320">
+<img src="docs/day.png" alt="Day view" width="290">&nbsp;
+<img src="docs/week.png" alt="Week view" width="290">&nbsp;
+<img src="docs/month.png" alt="Month view" width="290">
 
-**After** (this fork; demo data): Day, Week and Month tabs.
+<sub>Day · Week · Month (screenshots use demo data)</sub>
 
-<p>
-  <img src="docs/day.png" alt="Day view" width="300">
-  <img src="docs/week.png" alt="Week view" width="300">
-  <img src="docs/month.png" alt="Month view" width="300">
-</p>
-
-## What's new in 6.0
-
-- Tabs **Month / Week / Day**; arrows move by month / 7 days / 1 day.
-- **Week**: 7 day cards with up to 3 events each; click a card to open that day.
-- **Day**: "now" card (clock, time to next event or time left in current one, day progress, free time left) and a timeline of events with **Free** windows between them.
-- Dark blue palette and rounded cards; all colours live in `[Variables]` of `Calendar.ini`.
-- Times are converted from UTC to your time zone (Windows time zone, or `UtcOffsetHours` if set); previously hard-coded IST.
-- Double-click a day in Month to open it in Day.
-
-Settings in `[Variables]`: `WeekStart` (0 = Sunday, 1 = Monday), `DayStart` / `DayEnd` (hours of the window used for free time), `MinGap` (minimum free window, minutes).
-`Calendar.ini` is long because every meter is spelled out; the old version is kept as `Calendar.ini.bak` / `Calendar.lua.bak`.
-
-## Features (v5 description, still mostly valid)
-
-### 📅 Calendar Grid
-- Full month view with 6 weeks × 7 days layout
-- Blue dates for current month, grey dates for previous/next month
-- Cyan circle highlighting today's date
-- White circle highlighting selected date (with black text)
-- Previous/Next month navigation buttons
-- TODAY button to quickly return to current date
-
-### 🖱️ Interactive Date Selection
-- All 42 calendar cells are clickable
-- Grey dates automatically flip the calendar to show the previous/next month
-- Selected date is tracked and displayed throughout the interface
-- Visual feedback with white circles and black text
-
-### 📆 Google Calendar Integration
-- Fetches events from Google Calendar via ICS feed
-- UTC and `TZID` times are converted to your time zone
-- Supports both all-day events and timed events
-- Real-time event filtering based on selected date
-
-### 📋 Event Display
-- **TODAY EVENTS** section displays events for the selected date
-- Header dynamically changes to show selected date (e.g., "2025-10-21 EVENTS")
-- Each event shows the event name and time
-- **UPCOMING EVENTS** section displays future events relative to selection
-- Clean, organized layout with proper spacing
-
-### 🎨 Visual Design
-- Cyber/dark theme with cyan and white accents
-- Color-coded dates (cyan for current month, grey for other months)
-- Dark text on cyan/white circles for optimal readability
-- Smooth animations and hover effects
-- Professional typography and spacing
-
-## Installation
-
-### Prerequisites
-- Rainmeter (latest version)
-- Google Calendar with a valid ICS feed URL
-
-### Setup Steps
-
-1. **Extract Files**
-   - Extract the CyberCalendar folder to your Rainmeter Skins directory:
-     ```
-     C:\Users\[YourUsername]\Documents\Rainmeter\Skins\
-     ```
-
-2. **Configure Google Calendar ICS URLs**
-   - Copy `@Resources\Variables.inc.example` to `@Resources\Variables.inc` (it is gitignored, so your private links are never committed)
-   - Set `GoogleCalendarICS1` (and optionally `GoogleCalendarICS2`) to your feed URLs
-   - To get an ICS URL: Google Calendar > Settings > pick a calendar > Integrate calendar > "Secret address in iCal format"
-
-3. **Load the Skin**
-   - Open Rainmeter
-   - Find "CyberCalendar" in the skins list
-   - Click "Load" to display the calendar
-
-## Usage
-
-### Navigation
-- **Left Arrow (<)**: Go to previous month
-- **Right Arrow (>)**: Go to next month
-- **TODAY Button**: Return to current date and show today's events
-
-### Date Selection
-- **Click any date**: Select that date to view its events
-- **Click grey dates**: Automatically navigates to that month
-- **Selected date**: Shown with a white circle and black text
-
-### Event Display
-- Events for the selected date appear in the "TODAY EVENTS" section
-- The header changes to show the selected date (e.g., "2025-10-21 EVENTS")
-- Each event shows the time and event name
-- All-day events display as "All day"
-
-## File Structure
-
-```
-CyberCalender/
-├── Calendar.ini          # Main skin configuration (meters and styles)
-├── CHANGELOG.md          # What changed compared to upstream
-├── @Resources/
-│   ├── Calendar.lua      # Views, event parsing, free-time logic
-│   ├── Variables.inc     # Your private ICS URLs (gitignored, create from the .example)
-│   └── Parser.lua        # Reference ICS parser (not used)
-└── README.md             # This file
-```
-
-## Technical Details
-
-### Calendar Logic (Lua)
-- **GetDay(index)**: Returns the day number for a calendar cell (0-41)
-- **IsInCurrentMonth(index)**: Checks if a date is in the current month
-- **IsToday(index)**: Checks if a date is today
-- **SetSelectedDate(index)**: Sets the selected date and handles month navigation
-
-### Event Parsing (Lua)
-- **parseIcs()**: Parses RFC 5545 ICS format
-- **filterEvents()**: Filters events by date
-- **parseDt() / toDisplay()**: Convert UTC and `TZID` times to the display time zone
-- **GetParsedResultJson(selectedDate)**: Returns events for a specific date
-
-### Timezone Handling
-- Event times in UTC (`...Z`) and with a known `TZID` (Moscow, Yekaterinburg, Kolkata, etc., see `ZONES` in `Calendar.lua`) are converted to the display time zone
-- Display time zone = Windows time zone, unless `UtcOffsetHours` (for example `5` for Tyumen) is set in `@Resources\Variables.inc`
-- The "now" clock in the Day view uses the same time zone, so it always matches the events
-
-## Customization
-
-### Colors
-Edit the `[Variables]` section in `Calendar.ini`:
-```ini
-ColorWhite=255,255,255,255
-ColorCyan=0,200,255,255
-ColorEvent=100,200,255,200
-```
-
-### Fonts
-```ini
-FontFace=Segoe UI Light
-FontFaceTitle=Segoe UI
-FontFaceDays=Segoe UI
-```
-
-### Calendar Position and Size
-Edit `[MeterBG]` to change the size and position of the calendar window.
-
-## Troubleshooting
-
-### Events not showing?
-1. Verify your Google Calendar ICS URL is correct
-2. Check that your calendar is shared publicly
-3. Make sure the calendar has events for the selected date
-4. Reload the skin: Right-click → Reload
-
-### Dates showing incorrect times?
-1. Compare the Windows time zone with the one in Google Calendar (a wrong Windows time zone shifts every event)
-2. Either fix the Windows time zone, or set `UtcOffsetHours` (for example `5`) in `@Resources\Variables.inc`
-3. Reload the skin
-
-### Calendar not updating?
-1. Increase the UpdateRate in `[MeasureEventParser]` (currently 300 seconds)
-2. Manually refresh: Right-click → Refresh all
-
-## Performance Notes
-
-- Calendar caches parsed events to reduce processing
-- ICS feed is fetched every 300 seconds (configurable)
-- Supports up to 5 upcoming events display
-- Smooth performance even with large calendars
-
-## Future Enhancements
-
-Potential features for future versions:
-- Event details modal on click
-- Multi-calendar support
-- Event color coding by category
-- Weather integration
-- Quick event creation
-- Event notifications
-
-## Known Limitations
-
-- Limited to displaying 5 upcoming events (configurable in code)
-- ICS feed must be publicly accessible
-- No recurring event expansion (RRULE events show only once, on their first date)
-
-## Credits
-
-Built with:
-- **Rainmeter**: Desktop customization platform
-- **Lua**: Scripting language for calendar logic
-- **Google Calendar**: Event data source
-
-## License
-
-Free to use and modify for personal use.
-
-## Support
-
-For issues or suggestions:
-1. Check the troubleshooting section above
-2. Verify all configuration steps are complete
-3. Review the Rainmeter error log for detailed messages
+</div>
 
 ---
 
-**Version**: 1.0
-**Last Updated**: October 2025
-**Tested on**: Rainmeter 4.5+
+## Before and after
+
+This is a fork of [Gourav2000/CyberCalender](https://github.com/Gourav2000/CyberCalender). The original shows one month grid; this fork turns it into a daily planner.
+
+| Original | This fork |
+| :---: | :---: |
+| <img src="Screenshot.png" alt="Original CyberCalendar" width="300"> | <img src="docs/day.png" alt="CyberCalendar Day view" width="300"> |
+
+## Highlights
+
+- **Three views:** Day, Week and Month tabs. Day opens by default.
+- **Day view:**
+  - a "now" card with the current time, the time until the next event (or what is left of the current one), the free time left today, a progress bar of the day and the total free time of the day;
+  - a timeline of events with **free windows** between them, so you can see at a glance when you are actually free;
+  - past events are dimmed, the current one is highlighted, past free time is hidden;
+  - free windows longer than 8 hours are hidden on purpose (that is usually sleep).
+- **Week view:** seven day cards with up to three events each and "+N more". Click a card to open that day.
+- **Month view:** colour-coded event dots per calendar, the selected day's events and the next upcoming events. Double-click a day to open it in Day view.
+- **Adaptive size:** the panel shrinks when there are few events.
+- **Two Google calendars** at once, each with its own accent colour.
+- **Correct time zones:** UTC and `TZID` times are converted to your time zone, and the clock follows the same zone.
+- **Always on top friendly:** the empty area around the panel is click-through, so it works well on a second monitor.
+- **One palette to rule them all:** every colour is a variable, so re-theming takes a minute.
+
+## Installation
+
+1. Install [Rainmeter](https://www.rainmeter.net/).
+2. Put the project folder into your Rainmeter skins directory (usually `Documents\Rainmeter\Skins\`).
+3. Get a private iCal link for each calendar: Google Calendar > Settings > pick a calendar > *Integrate calendar* > **Secret address in iCal format**.
+4. Copy `@Resources\Variables.inc.example` to `@Resources\Variables.inc` and paste your link(s):
+
+   ```ini
+   [Variables]
+   GoogleCalendarICS1=https://calendar.google.com/calendar/ical/.../basic.ics
+   GoogleCalendarICS2=
+   ```
+
+   `Variables.inc` is listed in `.gitignore`, so your private links are never committed.
+5. Open Rainmeter, refresh the skin list and load **CyberCalender > Calendar.ini**.
+
+To keep the calendar above other windows, right-click it and choose *Position > Always on top*.
+
+## Usage
+
+| Action | Result |
+| --- | --- |
+| **Day / Week / Month** tabs | Switch the view |
+| **‹ ›** arrows | Previous / next day, week or month (depending on the view) |
+| Click the title | Month picker (jump to any month) |
+| Click a day in Month | Select it and show its events |
+| Double-click a day in Month | Open it in Day view |
+| Click a day card in Week | Open it in Day view |
+| **TODAY** | Back to today |
+| **REFRESH** | Reload the skin and the calendar data |
+
+## Configuration
+
+Settings live in the `[Variables]` section of `Calendar.ini` (and the optional ones in `@Resources\Variables.inc`).
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `WeekStart` | `1` | `0` = week starts on Sunday, `1` = on Monday |
+| `DayStart` / `DayEnd` | `8` / `22` | Hours of the day used to look for free time |
+| `MinGap` | `30` | Shortest free window to show (minutes) |
+| `MaxFreeGap` | `480` | Longest free window to show (minutes); longer ones are treated as sleep |
+| `UtcOffsetHours` | *(empty)* | Optional, goes in `Variables.inc`. Forces a fixed UTC offset (for example `5` for Tyumen) instead of the Windows time zone |
+| `Color*` | dark blue palette | All colours; `ColorAccent` is the main accent |
+| `FontFace`, `FontFaceTitle` | `Segoe UI`, `Segoe UI Semibold` | Fonts |
+
+### Time zones
+
+Event times with `Z` (UTC) or a known `TZID` (Moscow, Yekaterinburg, Kolkata and a few more, see `ZONES` in `Calendar.lua`) are converted to the display time zone. The display time zone is your Windows time zone unless `UtcOffsetHours` is set. If every event looks shifted by a few hours, compare the Windows time zone with the one in Google Calendar and fix one of them.
+
+## Project structure
+
+```text
+CyberCalender/
+├── Calendar.ini            # Meters and styles (the skin itself)
+├── @Resources/
+│   ├── Calendar.lua        # Views, ICS parsing, free-time logic, layout
+│   ├── Variables.inc       # Your private ICS links (gitignored, create from the .example)
+│   └── Variables.inc.example
+├── docs/                   # Screenshots used in this README
+├── CHANGELOG.md            # Everything that changed in this fork
+└── Screenshot.png          # Screenshot of the original skin
+```
+
+## Known limitations
+
+- Recurring events (`RRULE`) are not expanded: they show only once, on their first date.
+- The Rainmeter window does not shrink together with the panel. The empty area is transparent and click-through, so it is only visible in the window frame.
+- Only a short list of time zones with a fixed offset is understood for `TZID`; an unknown `TZID` is shown as written.
+
+## Troubleshooting
+
+- **No events:** check the links in `Variables.inc`, make sure the file starts with `[Variables]`, then press **REFRESH**.
+- **Times are shifted:** see [Time zones](#time-zones).
+- **Raw text like `[&MeasureCalendarScript:...]` on the panel:** the Lua script failed to load; check the Rainmeter log for the exact error.
+
+## Credits
+
+Original skin: [Gourav2000/CyberCalender](https://github.com/Gourav2000/CyberCalender). This fork adds the Day and Week views, the free-time logic, the new design, time zone handling and the code cleanup. See [CHANGELOG.md](CHANGELOG.md) for details. Licensing follows the original repository.
