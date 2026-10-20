@@ -4,6 +4,20 @@
 
 A sleek, dark-themed calendar skin for Rainmeter that integrates with Google Calendar to display your events directly on your desktop.
 
+## Screenshots
+
+**Before** (original skin by Gourav2000):
+
+<img src="Screenshot.png" alt="Original CyberCalendar" width="320">
+
+**After** (this fork; demo data): Day, Week and Month tabs.
+
+<p>
+  <img src="docs/day.png" alt="Day view" width="300">
+  <img src="docs/week.png" alt="Week view" width="300">
+  <img src="docs/month.png" alt="Month view" width="300">
+</p>
+
 ## What's new in 6.0
 
 - Tabs **Month / Week / Day**; arrows move by month / 7 days / 1 day.

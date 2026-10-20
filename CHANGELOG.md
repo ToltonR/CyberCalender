@@ -6,6 +6,7 @@ Everything below is what was added or changed in the fork.
 ## 6.0
 
 ### New
+- Before / After screenshots in the README (`docs/`).
 - **Tabs Day / Week / Month** (Day is the default). Arrows move by 1 day / 7 days / 1 month.
 - **Day view**
   - "Now" card: current time, time until the next event (or time left in the current one), free time left today, progress bar of the day.
