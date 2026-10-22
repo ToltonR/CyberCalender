@@ -32,6 +32,7 @@ Everything below is what was added or changed in the fork.
 - ICS parsing: escaped characters (`\,` `\;` `\n`), fields with parameters, locations.
 - Private calendar links moved out of `Calendar.ini` into the gitignored `@Resources/Variables.inc`.
 - `Variables.inc.example` was missing the `[Variables]` header, so Rainmeter ignored the variables (the second calendar could never work). Fixed.
+- If the calendar download fails (for example no network right after Windows starts), the skin retries after 20 seconds instead of waiting for the next 5-minute refresh.
 - Removed `Debug=1` from WebParser and references to a non-existent meter; the script re-parses ICS only when the downloaded data changes.
 - `Calendar.ini` rewritten with `MeterStyle` and a single script call per value instead of ~2800 lines of copy-paste per cell; month cells are now one shape plus one text meter.
 - The window is click-through outside the panel (`SolidColor=0,0,0,0`).
