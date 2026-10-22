@@ -25,6 +25,8 @@ Everything below is what was added or changed in the fork.
 - All colours are variables in `[Variables]` and are read by the Lua script (no colours hard-coded in Lua any more).
 
 ### Fixes and cleanup
+- **Recurring events (RRULE) are now expanded** (DAILY, WEEKLY with BYDAY, MONTHLY, YEARLY, INTERVAL, COUNT, UNTIL, EXDATE, moved instances via RECURRENCE-ID). Before, only the first occurrence of a series was shown, so weekly lessons were missing.
+- Events that repeat every day are treated as background routines: shown in Day, hidden in Week and Month (`DailyAsRoutine=0` to disable).
 - Event times are converted from UTC to your time zone (was hard-coded to IST, +5:30): the Windows time zone, or a fixed `UtcOffsetHours` from `Variables.inc` (useful when the PC time zone differs from the calendar's).
 - Events with `TZID` (e.g. `Europe/Moscow`, `Asia/Yekaterinburg`) are converted correctly instead of being shown as written.
 - The clock and "today" in the skin use the same time zone as events, so they always agree.
@@ -32,11 +34,10 @@ Everything below is what was added or changed in the fork.
 - ICS parsing: escaped characters (`\,` `\;` `\n`), fields with parameters, locations.
 - Private calendar links moved out of `Calendar.ini` into the gitignored `@Resources/Variables.inc`.
 - `Variables.inc.example` was missing the `[Variables]` header, so Rainmeter ignored the variables (the second calendar could never work). Fixed.
-- If the calendar download fails (for example no network right after Windows starts), the skin retries after 20 seconds instead of waiting for the next 5-minute refresh.
 - Removed `Debug=1` from WebParser and references to a non-existent meter; the script re-parses ICS only when the downloaded data changes.
 - `Calendar.ini` rewritten with `MeterStyle` and a single script call per value instead of ~2800 lines of copy-paste per cell; month cells are now one shape plus one text meter.
 - The window is click-through outside the panel (`SolidColor=0,0,0,0`).
 
 ### Known limitations
-- Recurring events (RRULE) are not expanded.
+- Recurrence rules with a week number ("every first Monday") or `BYMONTHDAY` are not supported.
 - The Rainmeter window does not shrink with the panel, only the visible part does (the empty area is transparent and click-through).

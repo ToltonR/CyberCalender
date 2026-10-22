@@ -41,6 +41,7 @@ This is a fork of [Gourav2000/CyberCalender](https://github.com/Gourav2000/Cyber
 - **Week view:** seven day cards with up to three events each and "+N more". Click a card to open that day.
 - **Month view:** colour-coded event dots per calendar, the selected day's events and the next upcoming events. Double-click a day to open it in Day view.
 - **Adaptive size:** the panel shrinks when there are few events.
+- **Recurring events** are expanded (daily, weekly, monthly, yearly), including excluded and moved occurrences.
 - **Two Google calendars** at once, each with its own accent colour.
 - **Correct time zones:** UTC and `TZID` times are converted to your time zone, and the clock follows the same zone.
 - **Always on top friendly:** the empty area around the panel is click-through, so it works well on a second monitor.
@@ -87,6 +88,7 @@ Settings live in the `[Variables]` section of `Calendar.ini` (and the optional o
 | `DayStart` / `DayEnd` | `8` / `22` | Hours of the day used to look for free time |
 | `MinGap` | `30` | Shortest free window to show (minutes) |
 | `MaxFreeGap` | `480` | Longest free window to show (minutes); longer ones are treated as sleep |
+| `DailyAsRoutine` | `1` | Events that repeat every day (wake up, sleep...) are shown only in Day view; set `0` to show them everywhere |
 | `UtcOffsetHours` | *(empty)* | Optional, goes in `Variables.inc`. Forces a fixed UTC offset (for example `5` for Tyumen) instead of the Windows time zone |
 | `Color*` | dark blue palette | All colours; `ColorAccent` is the main accent |
 | `FontFace`, `FontFaceTitle` | `Segoe UI`, `Segoe UI Semibold` | Fonts |
@@ -111,7 +113,7 @@ CyberCalender/
 
 ## Known limitations
 
-- Recurring events (`RRULE`) are not expanded: they show only once, on their first date.
+- Recurring events: `DAILY`, `WEEKLY` (with `BYDAY`), `MONTHLY` and `YEARLY` (same day) rules with `INTERVAL`, `COUNT`, `UNTIL`, excluded dates and moved instances are supported. "Every first Monday"-style rules (`BYDAY` with a week number, `BYMONTHDAY`) are not.
 - The Rainmeter window does not shrink together with the panel. The empty area is transparent and click-through, so it is only visible in the window frame.
 - Only a short list of time zones with a fixed offset is understood for `TZID`; an unknown `TZID` is shown as written.
 

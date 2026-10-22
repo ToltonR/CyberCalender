@@ -113,8 +113,8 @@ end
 -- ===============================================
 
 local events = {}
-local rawA, rawB = nil, nil
-local dayCache, upCache, slotCache = {}, {}, {}
+local rawA, rawB, parsedDay = nil, nil, nil
+local dayCache, upCache, slotCache, mainCache = {}, {}, {}, {}
 local shownKey, shown   -- кэш списка слотов для показа (см. shownSlots)
 
 local function readMeasure(name)
@@ -156,25 +156,152 @@ local ZONES = {
     ["Asia/Novosibirsk"] = 7, ["Asia/Krasnoyarsk"] = 7,
     ["Asia/Kolkata"] = 5.5, ["Asia/Calcutta"] = 5.5,
 }
+local WEEKDAYS = {SU = 0, MO = 1, TU = 2, WE = 3, TH = 4, FR = 5, SA = 6}
 
--- "20251021" (весь день) | "20251021T123000Z" (UTC) | "20251021T123000" + TZID | без TZID (как записано)
-local function parseDt(raw, tzid)
+-- "20251021" (весь день) | "20251021T123000" | "20251021T123000Z" -> таблица полей
+local function splitDt(raw)
     if not raw then return nil end
     raw = trim(raw)
     local y, m, d = raw:match("^(%d%d%d%d)(%d%d)(%d%d)$")
     if y then
-        return {date = y .. "-" .. m .. "-" .. d, allDay = true}
+        return {y = tonumber(y), m = tonumber(m), d = tonumber(d), allDay = true}
     end
     local y2, m2, d2, hh, mi, ss, z = raw:match("^(%d%d%d%d)(%d%d)(%d%d)T(%d%d)(%d%d)(%d%d)(Z?)$")
     if not y2 then return nil end
-    local zoneOffset = (z == "Z") and 0 or ZONES[tzid or ""]
-    if zoneOffset then
-        local epoch = timegm(tonumber(y2), tonumber(m2), tonumber(d2), tonumber(hh), tonumber(mi), tonumber(ss))
-                      - math.floor(zoneOffset * 3600)
-        local date, time = toDisplay(epoch)
+    return {y = tonumber(y2), m = tonumber(m2), d = tonumber(d2),
+            hh = tonumber(hh), mi = tonumber(mi), ss = tonumber(ss), z = z}
+end
+
+-- смещение пояса в часах: Z = UTC, известный TZID = из таблицы, иначе nil (плавающее время)
+local function zoneOffset(p, tzid)
+    if p.z == "Z" then return 0 end
+    return ZONES[tzid or ""]
+end
+
+-- «истинная» эпоха для сравнения дат (EXDATE, RECURRENCE-ID); плавающее время считаем как UTC
+local function dtEpoch(raw, tzid)
+    local p = splitDt(raw)
+    if not p then return nil end
+    local zo = zoneOffset(p, tzid) or 0
+    return timegm(p.y, p.m, p.d, p.hh or 0, p.mi or 0, p.ss or 0) - math.floor(zo * 3600)
+end
+
+-- дата/время события в поясе отображения
+local function parseDt(raw, tzid)
+    local p = splitDt(raw)
+    if not p then return nil end
+    if p.allDay then return {date = fmtDate(p.y, p.m, p.d), allDay = true} end
+    local zo = zoneOffset(p, tzid)
+    if zo then
+        local date, time = toDisplay(timegm(p.y, p.m, p.d, p.hh, p.mi, p.ss) - math.floor(zo * 3600))
         return {date = date, time = time}
     end
-    return {date = y2 .. "-" .. m2 .. "-" .. d2, time = hh .. ":" .. mi}
+    return {date = fmtDate(p.y, p.m, p.d), time = string.format("%02d:%02d", p.hh, p.mi)}
+end
+
+local function newEvent(base, date, time, endTime, allDay, endDate)
+    return {
+        source = base.source, title = base.title, location = base.location, routine = base.routine,
+        allDay = allDay or false, startDate = date, startTime = time, endTime = endTime, endDate = endDate,
+        key = (allDay and "0" or "1") .. (time or ""),
+    }
+end
+
+-- Раскрытие повторяющегося события (RRULE) в отдельные события в окне [сегодня-200, сегодня+400] дней.
+-- Поддержано: DAILY, WEEKLY (+BYDAY), MONTHLY и YEARLY (тот же день), INTERVAL, COUNT, UNTIL, EXDATE.
+-- Перенесённые занятия (RECURRENCE-ID) пропускаются здесь через overridden и приходят как обычные события.
+-- упрощение: BYDAY с номером недели ("первый понедельник") и BYMONTHDAY не поддержаны.
+local function expandRule(out, base, block, rawStart, tzStart, rawEnd, rr, uid, overridden)
+    local sp = splitDt(rawStart)
+    local zo = (not sp.allDay) and zoneOffset(sp, tzStart) or nil   -- nil = плавающее время
+    local zoff = math.floor((zo or 0) * 3600)
+    local startDn = math.floor(timegm(sp.y, sp.m, sp.d, 0, 0, 0) / 86400)
+    local secOfDay = (sp.hh or 0) * 3600 + (sp.mi or 0) * 60 + (sp.ss or 0)
+
+    -- длительность события в секундах
+    local ep = splitDt(rawEnd)
+    local durSec = sp.allDay and 86400 or 0
+    if ep then
+        durSec = timegm(ep.y, ep.m, ep.d, ep.hh or 0, ep.mi or 0, ep.ss or 0)
+               - timegm(sp.y, sp.m, sp.d, sp.hh or 0, sp.mi or 0, sp.ss or 0)
+    end
+
+    local r = {}
+    for k, v in rr:gmatch("(%u+)=([^;]+)") do r[k] = v end
+    local freq, interval, count = r.FREQ, tonumber(r.INTERVAL) or 1, tonumber(r.COUNT)
+    local untilEpoch = r.UNTIL and dtEpoch(r.UNTIL, nil)
+    if untilEpoch and not r.UNTIL:find("T") then untilEpoch = untilEpoch + 86399 end   -- UNTIL-дата = до конца дня
+
+    local byday = {}
+    for code in (r.BYDAY or ""):gmatch("(%u%u)") do byday[WEEKDAYS[code]] = true end
+    if next(byday) == nil then byday[(startDn + 4) % 7] = true end
+    local weekStartDn = startDn - ((startDn + 3) % 7)   -- понедельник недели начала серии
+
+    -- исключённые даты серии
+    local excluded = {}
+    for params, vals in block:gmatch("\nEXDATE([^:\n]*):([^\n]*)") do
+        local tz = params:match("TZID=([^;:]+)")
+        for v in vals:gmatch("[^,]+") do
+            local e = dtEpoch(v, tz)
+            if e then excluded[e] = true end
+        end
+    end
+
+    local ty, tm, td = parts(today())
+    local todayDn = math.floor(timegm(ty, tm, td, 0, 0, 0) / 86400)
+    local loDn, hiDn = todayDn - 200, todayDn + 400
+
+    local function emit(dn, occ)
+        if sp.allDay then
+            out[#out + 1] = newEvent(base, os.date("!%Y-%m-%d", dn * 86400), nil, nil, true,
+                                     os.date("!%Y-%m-%d", dn * 86400 + math.max(durSec, 86400)))
+            return
+        end
+        local date, time, endTime
+        if zo then
+            date, time = toDisplay(occ)
+            local _, et = toDisplay(occ + durSec)
+            endTime = et
+        else
+            local t, t2 = os.date("!*t", occ), os.date("!*t", occ + durSec)
+            date = fmtDate(t.year, t.month, t.day)
+            time = string.format("%02d:%02d", t.hour, t.min)
+            endTime = string.format("%02d:%02d", t2.hour, t2.min)
+        end
+        out[#out + 1] = newEvent(base, date, time, endTime, false)
+    end
+
+    local known = freq == "DAILY" or freq == "WEEKLY" or freq == "MONTHLY" or freq == "YEARLY"
+    if not known then   -- неизвестное правило: показываем только первое событие
+        emit(startDn, startDn * 86400 + secOfDay - zoff)
+        return
+    end
+
+    local n = 0
+    for dn = (count and startDn or math.max(startDn, loDn)), hiDn do
+        local ok
+        if freq == "DAILY" then
+            ok = (dn - startDn) % interval == 0
+        elseif freq == "WEEKLY" then
+            ok = byday[(dn + 4) % 7] and math.floor((dn - weekStartDn) / 7) % interval == 0
+        else
+            local t = os.date("!*t", dn * 86400)
+            if freq == "MONTHLY" then
+                ok = t.day == sp.d and ((t.year * 12 + t.month) - (sp.y * 12 + sp.m)) % interval == 0
+            else
+                ok = t.day == sp.d and t.month == sp.m and (t.year - sp.y) % interval == 0
+            end
+        end
+        if ok and dn >= startDn then
+            n = n + 1
+            if count and n > count then break end
+            local occ = dn * 86400 + secOfDay - zoff
+            if untilEpoch and occ > untilEpoch then break end
+            if dn >= loDn and not excluded[occ] and not overridden[uid .. "|" .. occ] then
+                emit(dn, occ)
+            end
+        end
+    end
 end
 
 local function parseIcs(body, source)
@@ -182,32 +309,49 @@ local function parseIcs(body, source)
     if not body or body == "" then return out end
     -- нормализуем переводы строк и склеиваем «сложенные» строки (RFC 5545)
     body = body:gsub("\r\n", "\n"):gsub("\r", "\n"):gsub("\n[ \t]", "")
-    for block in body:gmatch("BEGIN:VEVENT(.-)END:VEVENT") do
-        local function field(key)
-            return block:match("\n" .. key .. "[^:\n]*:([^\n]*)")
-        end
-        local function tzidOf(key)
-            return (block:match("\n" .. key .. "([^:\n]*):") or ""):match("TZID=([^;:]+)")
-        end
-        local s = parseDt(field("DTSTART"), tzidOf("DTSTART"))
+
+    local function field(block, key)
+        return block:match("\n" .. key .. "[^:\n]*:([^\n]*)")
+    end
+    local function tzidOf(block, key)
+        return (block:match("\n" .. key .. "([^:\n]*):") or ""):match("TZID=([^;:]+)")
+    end
+
+    local blocks = {}
+    for block in body:gmatch("BEGIN:VEVENT(.-)END:VEVENT") do blocks[#blocks + 1] = block end
+
+    -- перенесённые экземпляры серий (RECURRENCE-ID): исходную дату из самой серии не показываем
+    local overridden = {}
+    for _, block in ipairs(blocks) do
+        local rid = field(block, "RECURRENCE-ID")
+        local e = rid and dtEpoch(rid, tzidOf(block, "RECURRENCE-ID"))
+        if e then overridden[(field(block, "UID") or "") .. "|" .. e] = true end
+    end
+
+    for _, block in ipairs(blocks) do
+        local rawStart, tzStart = field(block, "DTSTART"), tzidOf(block, "DTSTART")
+        local s = parseDt(rawStart, tzStart)
         if s then
-            local e = parseDt(field("DTEND"), tzidOf("DTEND"))
-            local ev = {
+            local rawEnd = field(block, "DTEND")
+            local e = parseDt(rawEnd, tzidOf(block, "DTEND"))
+            local base = {
                 source = source,
-                title = trim(unescape(field("SUMMARY") or "")),
-                location = trim(unescape(field("LOCATION") or "")),
-                allDay = s.allDay or false,
-                startDate = s.date,
-                startTime = s.time,
-                endTime = e and e.time,
+                title = trim(unescape(field(block, "SUMMARY") or "")),
+                location = trim(unescape(field(block, "LOCATION") or "")),
             }
-            if ev.title == "" then ev.title = "(No title)" end
-            if ev.allDay then
-                -- DTEND у событий на весь день не включается в диапазон
-                ev.endDate = (e and e.date and e.date > s.date) and e.date or addDays(s.date, 1)
+            if base.title == "" then base.title = "(No title)" end
+            local rr = field(block, "RRULE")
+            base.routine = rr ~= nil and rr:find("FREQ=DAILY") ~= nil   -- каждый день = «фоновое» событие
+            if rr then
+                expandRule(out, base, block, rawStart, tzStart, rawEnd, rr, field(block, "UID") or "", overridden)
+            else
+                local endDate
+                if s.allDay then
+                    -- DTEND у событий на весь день не включается в диапазон
+                    endDate = (e and e.date and e.date > s.date) and e.date or addDays(s.date, 1)
+                end
+                out[#out + 1] = newEvent(base, s.date, s.time, e and e.time, s.allDay, endDate)
             end
-            ev.key = (ev.allDay and "0" or "1") .. (ev.startTime or "")
-            out[#out + 1] = ev
         end
     end
     return out
@@ -222,13 +366,14 @@ end
 -- перечитываем ICS только если данные от WebParser изменились
 local function reload()
     local a, b = readMeasure("MeasureEventParser"), readMeasure("MeasureEventParser2")
-    if a == rawA and b == rawB then return end
-    rawA, rawB = a, b
+    local day = today()   -- при смене дня пересобираем события: окно повторов сдвигается
+    if a == rawA and b == rawB and day == parsedDay then return end
+    rawA, rawB, parsedDay = a, b, day
     events = {}
     for _, e in ipairs(parseIcs(a, "1")) do events[#events + 1] = e end
     for _, e in ipairs(parseIcs(b, "2")) do events[#events + 1] = e end
     table.sort(events, sortEvents)
-    dayCache, upCache, slotCache, shownKey = {}, {}, {}, nil
+    dayCache, upCache, slotCache, mainCache, shownKey = {}, {}, {}, {}, nil
 end
 
 local function eventsOn(date)
@@ -251,12 +396,30 @@ local function eventsOn(date)
     return out
 end
 
+-- «Фоновые» события (повторяются каждый день: подъём, сон) показываем только в Day: в Week и Month
+-- они скрыты, иначе заглушают настоящие. Отключается переменной DailyAsRoutine=0.
+local function routinesHidden()
+    return num("DailyAsRoutine", 1) == 1
+end
+
+local function mainEventsOn(date)
+    if not routinesHidden() then return eventsOn(date) end
+    local cached = mainCache[date]
+    if cached then return cached end
+    local out = {}
+    for _, e in ipairs(eventsOn(date)) do
+        if not e.routine then out[#out + 1] = e end
+    end
+    mainCache[date] = out
+    return out
+end
+
 local function upcoming(date, limit)
     local cached = upCache[date]
     if cached then return cached end
     local out = {}
     for _, e in ipairs(events) do
-        if e.startDate > date then
+        if e.startDate > date and not (e.routine and routinesHidden()) then
             out[#out + 1] = e
             if #out >= limit then break end
         end
@@ -278,7 +441,7 @@ local function timeText(e)
 end
 
 local function hasSource(date, src)
-    for _, e in ipairs(eventsOn(date)) do
+    for _, e in ipairs(mainEventsOn(date)) do
         if e.source == src then return true end
     end
     return false
@@ -287,7 +450,7 @@ end
 -- списки для Month: 1 = события выбранного дня, 2 = ближайшие после него
 local function getList(list)
     if list == 2 then return upcoming(focus(), 3) end
-    return eventsOn(focus())
+    return mainEventsOn(focus())
 end
 
 local function evAt(list, i)
@@ -400,7 +563,7 @@ function GetSubtitle()
         return DOW_LONG[dow(t) + 1] .. ", " .. MONTHS[m] .. " " .. d .. ", " .. y
     elseif view == VIEW_WEEK then
         local first, n = weekFirst(focus()), 0
-        for i = 0, 6 do n = n + #eventsOn(addDays(first, i)) end
+        for i = 0, 6 do n = n + #mainEventsOn(addDays(first, i)) end
         return plural(n) .. " this week"
     end
     local f = focus()
@@ -562,7 +725,7 @@ function GetSelHeader()
 end
 
 function GetSelCount()
-    return plural(#eventsOn(focus()))
+    return plural(#mainEventsOn(focus()))
 end
 
 -- ===============================================
@@ -739,7 +902,7 @@ local function cardH(count, emptyH)
     local rows = math.min(3, count)
     return rows == 0 and emptyH or 42 + 22 * rows
 end
-local function selH() return cardH(#eventsOn(focus()), 38) end
+local function selH() return cardH(#mainEventsOn(focus()), 38) end
 local function upRows() return #upcoming(focus(), 3) end
 local function upH() return cardH(upRows(), 0) end
 local function upY() return 388 + selH() + 8 end
@@ -853,7 +1016,7 @@ end
 
 -- что показать в строке l (1-3) карточки дня d: "ev" + событие | "more" + число | "none" | nil (пусто)
 local function weekCell(d, l)
-    local list = eventsOn(weekDate(d))
+    local list = mainEventsOn(weekDate(d))
     local n = #list
     if n == 0 then
         if l == 1 then return "none" end
