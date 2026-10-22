@@ -6,7 +6,6 @@ Everything below is what was added or changed in the fork.
 ## 6.0
 
 ### New
-- Before / After screenshots in the README (`docs/`).
 - **Tabs Day / Week / Month** (Day is the default). Arrows move by 1 day / 7 days / 1 month.
 - **Day view**
   - "Now" card: current time, time until the next event (or time left in the current one), free time left today, progress bar of the day, total free time of the whole day (top right).
@@ -20,7 +19,6 @@ Everything below is what was added or changed in the fork.
 
 ### Design
 - New dark blue palette with one soft accent colour, rounded cards, rounded day cells and a segmented tab control.
-- Code cleanup: shared helpers for settings and date/time, cached month grid dates, removed unused functions.
 - Larger fonts (times, titles, free-time labels) and brighter secondary text for readability.
 - All colours are variables in `[Variables]` and are read by the Lua script (no colours hard-coded in Lua any more).
 
@@ -34,9 +32,14 @@ Everything below is what was added or changed in the fork.
 - ICS parsing: escaped characters (`\,` `\;` `\n`), fields with parameters, locations.
 - Private calendar links moved out of `Calendar.ini` into the gitignored `@Resources/Variables.inc`.
 - `Variables.inc.example` was missing the `[Variables]` header, so Rainmeter ignored the variables (the second calendar could never work). Fixed.
+- If the calendar download fails (for example no network right after Windows starts), the skin retries after 20 seconds instead of waiting for the next 5-minute refresh.
 - Removed `Debug=1` from WebParser and references to a non-existent meter; the script re-parses ICS only when the downloaded data changes.
 - `Calendar.ini` rewritten with `MeterStyle` and a single script call per value instead of ~2800 lines of copy-paste per cell; month cells are now one shape plus one text meter.
 - The window is click-through outside the panel (`SolidColor=0,0,0,0`).
+
+### Code and docs
+- `Calendar.lua`: shared helpers for settings and date/time, cached month grid dates, removed unused functions.
+- README redesigned (hero screenshots, badges, usage and configuration tables) with before/after screenshots in `docs/`.
 
 ### Known limitations
 - Recurrence rules with a week number ("every first Monday") or `BYMONTHDAY` are not supported.
