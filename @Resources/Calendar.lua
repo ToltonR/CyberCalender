@@ -803,21 +803,21 @@ local function daySlots(date)
     return slots
 end
 
--- Слоты для показа. Сегодня прошедшее свободное время не показываем, а текущее окно
--- начинаем с «сейчас»; если до конца окна осталось меньше MinGap, оно тоже скрывается.
+-- Слоты для показа. Сегодня текущее окно свободного времени делится на уже прошедшую часть и
+-- оставшуюся (от «сейчас»), части короче MinGap не показываем. Прошедшие слоты остаются в списке:
+-- они свёрнуты под «+N earlier» и приглушены, поэтому «Free today» всегда сходится с лентой.
 -- Список пересчитывается раз в минуту (ключ = дата + минута).
 local function shownSlots()
     local date = focus()
     local now = focusIsToday() and nowMin() or -1
     local key = date .. ":" .. now
     if key == shownKey then return shown end
+    local minGap = num("MinGap", 30)
     local out = {}
     for _, sl in ipairs(daySlots(date)) do
-        if sl.kind == "gap" and now >= 0 then
-            local from = math.max(sl.s, now)
-            if sl.en - from >= num("MinGap", 30) then
-                out[#out + 1] = {kind = "gap", s = from, en = sl.en}
-            end
+        if sl.kind == "gap" and sl.s < now and now < sl.en then
+            if now - sl.s >= minGap then out[#out + 1] = {kind = "gap", s = sl.s, en = now} end
+            if sl.en - now >= minGap then out[#out + 1] = {kind = "gap", s = now, en = sl.en} end
         else
             out[#out + 1] = sl
         end
@@ -913,8 +913,8 @@ end
 function SlotTitleColor(k)
     local sl = slotAt(k)
     if not sl then return color("ColorText") end
-    if sl.kind == "gap" then return color("ColorAccent") end
     if slotState(sl) == "past" then return color("ColorDim") end
+    if sl.kind == "gap" then return color("ColorAccent") end
     return color("ColorText")
 end
 
