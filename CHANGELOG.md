@@ -12,12 +12,13 @@ Everything below is what was added or changed in the fork.
   - Timeline of events with **free windows** ("Free, 1h") between them. The current event is highlighted, past ones are dimmed.
   - Free windows longer than 8 hours are not shown (most likely sleep). Today, the current free window is split into the part that has passed and the part from "now"; past slots are dimmed and collapsed under "+N earlier", so "Free today" always adds up with the timeline. Other days show total free time instead of the clock.
 - **Day timeline scrolling**: past events are collapsed into a "+N earlier" line and upcoming ones that do not fit into "+N more"; click them or use the mouse wheel to scroll up and down.
-- **Sleep time**: free time is searched only in the awake window (`DayStart` + 24 - `SleepHours` hours, default 07:00-23:00) instead of a fixed 08:00-22:00.
+- **Sleep schedule**: wake-up and bedtime are set in the skin (click the line under the date in Day view, arrows in 30-minute steps, saved in `Settings.inc`; defaults 07:00 / 23:00). Free time is searched only while you are awake, the date line shows how much sleep is left after night events (`sleep 6h 31m!` when below the 8-hour minimum, `MinSleepHours`).
+- **Two free-time values** in the "now" card: `Free today` (whole day) and `Free now` (from the current moment).
 - **Week view**: 7 day cards with up to 3 events each and "+N more"; click a card to open that day.
 - **Adaptive height**: the panel shrinks in Day and Month when there are few events.
 - **Month view**: double-click a day to open it in Day; event dots are centred and coloured per calendar.
 - **Always on top** support and a layout meant for a secondary monitor.
-- Settings in `[Variables]`: `WeekStart` (0 = Sunday, 1 = Monday; set to Monday), `DayStart`, `SleepHours`, `MinGap`, `MaxFreeGap`, `DailyAsRoutine`.
+- Settings in `[Variables]`: `WeekStart` (0 = Sunday, 1 = Monday; set to Monday), `MinGap`, `MaxFreeGap`, `DailyAsRoutine`.
 
 ### Design
 - New dark blue palette with one soft accent colour, rounded cards, rounded day cells and a segmented tab control.

@@ -3,11 +3,12 @@
 -- Все функции вызываются из .ini через [&MeasureCalendarScript:Имя(аргументы)],
 -- поэтому аргументы везде числовые (без кавычек) и сразу приводятся через tonumber.
 
-local VIEW_MONTH, VIEW_WEEK, VIEW_DAY, VIEW_PICKER = 0, 1, 2, 3
+local VIEW_MONTH, VIEW_WEEK, VIEW_DAY, VIEW_PICKER, VIEW_SLEEP = 0, 1, 2, 3, 4
 local view = VIEW_DAY   -- вкладка по умолчанию
 local currentMonth, currentYear   -- какой месяц показан в сетке
 local selectedDate = nil          -- "YYYY-MM-DD", если пользователь выбрал дату (nil = сегодня)
 local pickerOpen, pickerYear = false, nil
+local sleepOpen = false           -- открыта ли панель «режим сна» (Day)
 local dayOffset = 0               -- сдвиг окна ленты Day относительно «авто» (см. windowStart)
 
 local MONTHS = {"January", "February", "March", "April", "May", "June",
@@ -530,6 +531,7 @@ end
 function Hid(v)
     v = tonumber(v)
     if v == VIEW_PICKER then return pickerOpen and 0 or 1 end
+    if v == VIEW_SLEEP then return (sleepOpen and view == VIEW_DAY) and 0 or 1 end
     return (view == v) and 0 or 1
 end
 
@@ -559,27 +561,6 @@ end
 local function plural(n)
     if n == 0 then return "No events" end
     return n .. (n == 1 and " event" or " events")
-end
-
-function GetSubtitle()
-    if view == VIEW_MONTH then
-        local t = today()
-        local y, m, d = parts(t)
-        return DOW_LONG[dow(t) + 1] .. ", " .. MONTHS[m] .. " " .. d .. ", " .. y
-    elseif view == VIEW_WEEK then
-        local first, n = weekFirst(focus()), 0
-        for i = 0, 6 do n = n + #mainEventsOn(addDays(first, i)) end
-        return plural(n) .. " this week"
-    end
-    local f = focus()
-    local diff = math.floor((epoch(f) - epoch(today())) / 86400 + 0.5)
-    local rel
-    if diff == 0 then rel = "Today"
-    elseif diff == 1 then rel = "Tomorrow"
-    elseif diff == -1 then rel = "Yesterday"
-    elseif diff > 1 then rel = "In " .. diff .. " days"
-    else rel = -diff .. " days ago" end
-    return rel .. ", " .. plural(#eventsOn(f))
 end
 
 function TabBG(i)
@@ -760,11 +741,30 @@ local function nowMin()
     return t.hour * 60 + t.min
 end
 
--- окно бодрствования, в котором ищем свободное время (минуты от 00:00):
--- с DayStart на (24 - SleepHours) часов, остальные SleepHours часов суток отданы под сон
+-- "HH:MM" из переменной -> минуты от 00:00
+local function timeVar(name, default)
+    local h, m = SKIN:GetVariable(name, default):match("^(%d+):(%d+)$")
+    if not h then h, m = default:match("^(%d+):(%d+)$") end
+    return tonumber(h) * 60 + tonumber(m)
+end
+
+-- Режим сна: WakeTime (подъём) и BedTime (отбой), по умолчанию 07:00 и 23:00. Их меняют кнопками в скине
+-- (панель по клику на подзаголовок в Day), значения хранятся в @Resources\Settings.inc.
+local function sleepTimes()
+    return timeVar("WakeTime", "07:00"), timeVar("BedTime", "23:00")
+end
+
+-- запланированный сон в минутах: от отбоя до подъёма (через полночь)
+local function plannedSleep()
+    local wake, bed = sleepTimes()
+    return (wake - bed) % 1440
+end
+
+-- окно бодрствования, в котором ищем свободное время (минуты от 00:00);
+-- упрощение: если отбой после полуночи, окно заканчивается в полночь
 local function dayWindow()
-    local start = num("DayStart", 7) * 60
-    return start, start + (24 - num("SleepHours", 8)) * 60
+    local wake, bed = sleepTimes()
+    return wake, (bed > wake) and bed or 1440
 end
 
 -- слоты дня по порядку: события на весь день, затем timed-события и свободные окна между ними
@@ -918,6 +918,54 @@ function SlotTitleColor(k)
     return color("ColorText")
 end
 
+-- Сколько минут сна остаётся в ночь после дня date: события со временем между отбоем и подъёмом
+-- съедают сон. упрощение: пересекающиеся ночью события считаются по отдельности.
+local function sleepLeft(date)
+    local wake, bed = sleepTimes()
+    local used = 0
+    local function eat(list, from, to)
+        for _, e in ipairs(list) do
+            if not e.allDay then
+                local st = toMin(e.startTime)
+                local en = e.endTime and toMin(e.endTime) or st
+                if en <= st then en = 1440 end
+                used = used + math.max(0, math.min(en, to) - math.max(st, from))
+            end
+        end
+    end
+    local nextDay = addDays(date, 1)
+    if bed > wake then
+        eat(eventsOn(date), bed, 1440)      -- вечер этого дня после отбоя
+        eat(eventsOn(nextDay), 0, wake)     -- ночь и раннее утро следующего
+    else
+        eat(eventsOn(nextDay), bed, wake)   -- отбой после полуночи
+    end
+    return math.max(0, plannedSleep() - used)
+end
+
+function GetSubtitle()
+    if view == VIEW_MONTH then
+        local t = today()
+        local y, m, d = parts(t)
+        return DOW_LONG[dow(t) + 1] .. ", " .. MONTHS[m] .. " " .. d .. ", " .. y
+    elseif view == VIEW_WEEK then
+        local first, n = weekFirst(focus()), 0
+        for i = 0, 6 do n = n + #mainEventsOn(addDays(first, i)) end
+        return plural(n) .. " this week"
+    end
+    local f = focus()
+    local diff = math.floor((epoch(f) - epoch(today())) / 86400 + 0.5)
+    local rel
+    if diff == 0 then rel = "Today"
+    elseif diff == 1 then rel = "Tomorrow"
+    elseif diff == -1 then rel = "Yesterday"
+    elseif diff > 1 then rel = "In " .. diff .. " days"
+    else rel = -diff .. " days ago" end
+    local sleep = sleepLeft(f)
+    local warn = sleep < num("MinSleepHours", 8) * 60   -- «!»: сна меньше минимума
+    return rel .. ", " .. plural(#eventsOn(f)) .. ", sleep " .. durText(sleep) .. (warn and "!" or "")
+end
+
 -- сколько слотов скрыто сверху (прошедшие) и снизу (дальше по времени)
 local function slotsAbove()
     if view ~= VIEW_DAY then return 0 end
@@ -968,6 +1016,7 @@ function PanelH()
         h = (n <= 0) and 266 or (216 + (n - 1) * 51 + 45 + 58)
     end
     if pickerOpen then h = math.max(h, 440) end   -- пикер месяца должен помещаться
+    if sleepOpen and view == VIEW_DAY then h = math.max(h, 400) end   -- панель режима сна должна помещаться
     return h
 end
 -- Y подписи «+N more»: сразу под последней показанной карточкой
@@ -1009,7 +1058,7 @@ end
 function BannerSub()
     local left = (focusIsToday()) and freeTotal(focus(), nowMin()) or freeTotal(focus())
     if left <= 0 then return "" end
-    return durText(left) .. (focusIsToday() and " free left" or " free time")
+    return (focusIsToday() and "Free now " or "Free ") .. durText(left)
 end
 
 -- сколько свободного времени за весь сегодняшний день (с учётом уже прошедшего)
@@ -1131,4 +1180,44 @@ function WeekDot(d, l)
     local kind, e = weekCell(tonumber(d), tonumber(l))
     if kind == "ev" then return sourceColor(e.source) end
     return CLEAR
+end
+
+-- ===============================================
+-- ПАНЕЛЬ «РЕЖИМ СНА» (Day): подъём и отбой кнопками, шаг 30 минут
+-- ===============================================
+
+function ToggleSleep()
+    if view == VIEW_DAY then sleepOpen = not sleepOpen end
+end
+
+local function timeText24(minutes)
+    minutes = minutes % 1440
+    return string.format("%02d:%02d", math.floor(minutes / 60), minutes % 60)
+end
+
+function WakeText() return timeText24(select(1, sleepTimes())) end
+function BedText() return timeText24(select(2, sleepTimes())) end
+
+-- which: 0 = подъём, 1 = отбой; delta - минуты (+30 / -30). Значение сразу применяется и сохраняется в Settings.inc
+function AdjustSleep(which, delta)
+    local wake, bed = sleepTimes()
+    local name, value
+    if tonumber(which) == 0 then name, value = "WakeTime", timeText24(wake + tonumber(delta))
+    else name, value = "BedTime", timeText24(bed + tonumber(delta)) end
+    local path = SKIN:ReplaceVariables("#@#Settings.inc")   -- файл лежит в проекте: !WriteKeyValue не создаёт новые файлы
+    SKIN:Bang("!SetVariable", name, value)
+    SKIN:Bang("!WriteKeyValue", "Variables", name, value, path)
+    slotCache, shownKey = {}, nil   -- свободные окна зависят от режима сна
+end
+
+function SleepSummary()
+    local planned, min = plannedSleep(), num("MinSleepHours", 8) * 60
+    local text = "Sleep " .. durText(planned)
+    if planned < min then text = text .. ", less than " .. durText(min) .. "!" end
+    return text
+end
+
+function SleepSummaryColor()
+    if plannedSleep() < num("MinSleepHours", 8) * 60 then return color("ColorWarn") end
+    return color("ColorAccent")
 end

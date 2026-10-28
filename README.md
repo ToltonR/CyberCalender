@@ -40,6 +40,7 @@ This is a fork of [Gourav2000/CyberCalender](https://github.com/Gourav2000/Cyber
   - free windows longer than 8 hours are hidden on purpose (that is usually sleep).
 - **Week view:** seven day cards with up to three events each and "+N more". Click a card to open that day.
 - **Month view:** colour-coded event dots per calendar, the selected day's events and the next upcoming events. Double-click a day to open it in Day view.
+- **Sleep schedule:** set when you wake up and go to bed right in the skin; the timeline only looks for free time while you are awake, and the date line shows how much sleep is left (with a warning when it drops below 8 hours).
 - **Adaptive size:** the panel shrinks when there are few events.
 - **Recurring events** are expanded (daily, weekly, monthly, yearly), including excluded and moved occurrences.
 - **Two Google calendars** at once, each with its own accent colour.
@@ -86,7 +87,8 @@ Settings live in the `[Variables]` section of `Calendar.ini` (and the optional o
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `WeekStart` | `1` | `0` = week starts on Sunday, `1` = on Monday |
-| `DayStart` / `SleepHours` | `7` / `8` | Your day starts at `DayStart` and `SleepHours` hours of the day are reserved for sleep; free time is looked for in the remaining window (by default 07:00-23:00) |
+| `WakeTime` / `BedTime` | `07:00` / `23:00` | Your sleep schedule. Set it in the skin: click the line under the date in Day view ("Today, 5 events, sleep 8h") and use the arrows (30-minute steps). Saved in `@Resources\Settings.inc`. Free time is looked for between wake-up and bedtime |
+| `MinSleepHours` | `8` | Minimum sleep; a shorter schedule or night events that eat into sleep are flagged with `!` and an orange warning |
 | `MinGap` | `30` | Shortest free window to show (minutes) |
 | `MaxFreeGap` | `480` | Longest free window to show (minutes); longer ones are treated as sleep |
 | `DailyAsRoutine` | `1` | Events that repeat every day (wake up, sleep...) are shown only in Day view; set `0` to show them everywhere |
@@ -105,6 +107,7 @@ CyberCalender/
 ├── Calendar.ini            # Meters and styles (the skin itself)
 ├── @Resources/
 │   ├── Calendar.lua        # Views, ICS parsing, free-time logic, layout
+│   ├── Settings.inc        # Settings written by the skin (sleep schedule)
 │   ├── Variables.inc       # Your private ICS links (gitignored, create from the .example)
 │   └── Variables.inc.example
 ├── docs/                   # Screenshots used in this README
