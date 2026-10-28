@@ -8,6 +8,7 @@ local view = VIEW_DAY   -- вкладка по умолчанию
 local currentMonth, currentYear   -- какой месяц показан в сетке
 local selectedDate = nil          -- "YYYY-MM-DD", если пользователь выбрал дату (nil = сегодня)
 local pickerOpen, pickerYear = false, nil
+local dayOffset = 0               -- сдвиг окна ленты Day относительно «авто» (см. windowStart)
 
 local MONTHS = {"January", "February", "March", "April", "May", "June",
                 "July", "August", "September", "October", "November", "December"}
@@ -484,6 +485,7 @@ function SetView(v)
         currentYear, currentMonth = parts(focus())
     end
     view = v
+    dayOffset = 0
     pickerOpen = false
 end
 
@@ -496,6 +498,7 @@ local function shift(dir)
         selectedDate = addDays(focus(), 7 * dir)
     else
         selectedDate = addDays(focus(), dir)
+        dayOffset = 0
     end
 end
 
@@ -504,6 +507,7 @@ function NextPeriod() shift(1) end
 
 function GoToToday()
     selectedDate = nil
+    dayOffset = 0
     local n = nowTable()
     currentMonth, currentYear = n.month, n.year
     pickerOpen = false
@@ -511,6 +515,7 @@ end
 
 -- клик по ячейке месяца (index 0-41); серые даты соседних месяцев переключают сетку
 function SetSelectedDate(index)
+    dayOffset = 0
     selectedDate = cellDate(index)
     currentYear, currentMonth = parts(selectedDate)
 end
@@ -679,6 +684,7 @@ function MonthBtnText(i)
 end
 
 function SelectMonth(i)
+    dayOffset = 0
     currentMonth = tonumber(i) or 1
     currentYear = GetPickerYear()
     -- в Month выбор сбрасывается; в Week/Day переходим на 1-е число выбранного месяца
@@ -754,9 +760,11 @@ local function nowMin()
     return t.hour * 60 + t.min
 end
 
--- рабочее окно, в котором ищем свободное время (минуты от 00:00)
+-- окно бодрствования, в котором ищем свободное время (минуты от 00:00):
+-- с DayStart на (24 - SleepHours) часов, остальные SleepHours часов суток отданы под сон
 local function dayWindow()
-    return num("DayStart", 8) * 60, num("DayEnd", 22) * 60
+    local start = num("DayStart", 7) * 60
+    return start, start + (24 - num("SleepHours", 8)) * 60
 end
 
 -- слоты дня по порядку: события на весь день, затем timed-события и свободные окна между ними
@@ -818,10 +826,6 @@ local function shownSlots()
     return out
 end
 
-local function slotAt(k)
-    return shownSlots()[tonumber(k)]
-end
-
 -- "past" | "now" | "future": только для сегодняшнего дня и событий со временем
 local function slotState(sl)
     if not focusIsToday() or not sl.s then return "future" end
@@ -829,6 +833,36 @@ local function slotState(sl)
     if sl.en <= n then return "past" end
     if sl.s <= n then return "now" end
     return "future"
+end
+
+-- Окно ленты Day: показываем DAY_SLOTS слотов. «Авто»-начало = первый непрошедший слот со временем,
+-- прошедшее свёрнуто сверху («+N earlier»); dayOffset (кнопки и колесо мыши) двигает окно вверх/вниз.
+local function autoStart(list)
+    if not focusIsToday() then return 1 end
+    for i, sl in ipairs(list) do
+        if sl.s and slotState(sl) ~= "past" then return i end
+    end
+    return #list + 1   -- всё уже прошло: покажем последние слоты
+end
+
+local function maxStart(list)
+    return math.max(1, #list - DAY_SLOTS + 1)
+end
+
+local function windowStart()
+    local list = shownSlots()
+    return math.min(maxStart(list), math.max(1, autoStart(list) + dayOffset))
+end
+
+-- прокрутка ленты Day на delta слотов (минус = вверх, к прошедшему)
+function ScrollDay(delta)
+    local list = shownSlots()
+    local target = math.min(maxStart(list), math.max(1, windowStart() + tonumber(delta)))
+    dayOffset = target - autoStart(list)
+end
+
+local function slotAt(k)
+    return shownSlots()[windowStart() + tonumber(k) - 1]
 end
 
 function HidSlot(k)
@@ -884,14 +918,21 @@ function SlotTitleColor(k)
     return color("ColorText")
 end
 
--- сколько слотов не поместилось в Day
-local function hiddenSlots()
+-- сколько слотов скрыто сверху (прошедшие) и снизу (дальше по времени)
+local function slotsAbove()
     if view ~= VIEW_DAY then return 0 end
-    return math.max(0, #shownSlots() - DAY_SLOTS)
+    return windowStart() - 1
 end
 
-function HidMore() return hiddenSlots() > 0 and 0 or 1 end
-function DayMore() return hiddenSlots() > 0 and ("+" .. hiddenSlots() .. " more") or "" end
+local function slotsBelow()
+    if view ~= VIEW_DAY then return 0 end
+    return math.max(0, #shownSlots() - (windowStart() + DAY_SLOTS - 1))
+end
+
+function HidEarlier() return slotsAbove() > 0 and 0 or 1 end
+function HidMore() return slotsBelow() > 0 and 0 or 1 end
+function EarlierText() return "+" .. slotsAbove() .. " earlier" end
+function DayMore() return "+" .. slotsBelow() .. " more" end
 
 -- ===============================================
 -- АДАПТИВНЫЙ РАЗМЕР: высота окна и положение блоков зависят от числа событий
@@ -923,11 +964,16 @@ function PanelH()
     elseif view == VIEW_WEEK then
         h = 660
     else
-        local n = math.min(#shownSlots(), DAY_SLOTS)
-        h = (n == 0) and 250 or (200 + (n - 1) * 51 + 45 + 58)
+        local n = math.min(DAY_SLOTS, #shownSlots() - windowStart() + 1)
+        h = (n <= 0) and 266 or (216 + (n - 1) * 51 + 45 + 58)
     end
     if pickerOpen then h = math.max(h, 440) end   -- пикер месяца должен помещаться
     return h
+end
+-- Y подписи «+N more»: сразу под последней показанной карточкой
+function MoreY()
+    local n = math.min(DAY_SLOTS, #shownSlots() - windowStart() + 1)
+    return 216 + math.max(0, n - 1) * 51 + 45 + 10
 end
 function FooterY() return PanelH() - 28 end
 function FooterPillY() return PanelH() - 40 end

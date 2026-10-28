@@ -36,7 +36,7 @@ This is a fork of [Gourav2000/CyberCalender](https://github.com/Gourav2000/Cyber
 - **Day view:**
   - a "now" card with the current time, the time until the next event (or what is left of the current one), the free time left today, a progress bar of the day and the total free time of the day;
   - a timeline of events with **free windows** between them, so you can see at a glance when you are actually free;
-  - past events are dimmed, the current one is highlighted, past free time is hidden;
+  - past events are dimmed and collapsed into a **+N earlier** line above the timeline, upcoming ones that do not fit into **+N more** below it; click them (or use the mouse wheel over the timeline) to scroll up and down;
   - free windows longer than 8 hours are hidden on purpose (that is usually sleep).
 - **Week view:** seven day cards with up to three events each and "+N more". Click a card to open that day.
 - **Month view:** colour-coded event dots per calendar, the selected day's events and the next upcoming events. Double-click a day to open it in Day view.
@@ -76,6 +76,7 @@ To keep the calendar above other windows, right-click it and choose *Position > 
 | Double-click a day in Month | Open it in Day view |
 | Click a day card in Week | Open it in Day view |
 | **TODAY** | Back to today |
+| **+N earlier / +N more** (Day) | Scroll the timeline by 4 slots; the mouse wheel scrolls by 1 |
 | **REFRESH** | Reload the skin and the calendar data |
 
 ## Configuration
@@ -85,7 +86,7 @@ Settings live in the `[Variables]` section of `Calendar.ini` (and the optional o
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `WeekStart` | `1` | `0` = week starts on Sunday, `1` = on Monday |
-| `DayStart` / `DayEnd` | `8` / `22` | Hours of the day used to look for free time |
+| `DayStart` / `SleepHours` | `7` / `8` | Your day starts at `DayStart` and `SleepHours` hours of the day are reserved for sleep; free time is looked for in the remaining window (by default 07:00-23:00) |
 | `MinGap` | `30` | Shortest free window to show (minutes) |
 | `MaxFreeGap` | `480` | Longest free window to show (minutes); longer ones are treated as sleep |
 | `DailyAsRoutine` | `1` | Events that repeat every day (wake up, sleep...) are shown only in Day view; set `0` to show them everywhere |
