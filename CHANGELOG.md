@@ -26,6 +26,7 @@ Everything below is what was added or changed in the fork.
 - All colours are variables in `[Variables]` and are read by the Lua script (no colours hard-coded in Lua any more).
 
 ### Fixes and cleanup
+- Moved occurrences of recurring events (`RECURRENCE-ID`) are now matched correctly: the old time of a moved lesson no longer stays on the calendar next to the new one (the hyphen in the field name was treated as a Lua pattern special character).
 - **Recurring events (RRULE) are now expanded** (DAILY, WEEKLY with BYDAY, MONTHLY, YEARLY, INTERVAL, COUNT, UNTIL, EXDATE, moved instances via RECURRENCE-ID). Before, only the first occurrence of a series was shown, so weekly lessons were missing.
 - Events that repeat every day are treated as background routines: shown in Day, hidden in Week and Month (`DailyAsRoutine=0` to disable).
 - Event times are converted from UTC to your time zone (was hard-coded to IST, +5:30): the Windows time zone, or a fixed `UtcOffsetHours` from `Variables.inc` (useful when the PC time zone differs from the calendar's).

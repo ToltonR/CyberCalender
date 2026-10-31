@@ -312,11 +312,13 @@ local function parseIcs(body, source)
     -- нормализуем переводы строк и склеиваем «сложенные» строки (RFC 5545)
     body = body:gsub("\r\n", "\n"):gsub("\r", "\n"):gsub("\n[ \t]", "")
 
+    -- дефис в имени поля (RECURRENCE-ID) в шаблонах Lua - спецсимвол, поэтому экранируем его
+    local function pat(key) return (key:gsub("%-", "%%-")) end
     local function field(block, key)
-        return block:match("\n" .. key .. "[^:\n]*:([^\n]*)")
+        return block:match("\n" .. pat(key) .. "[^:\n]*:([^\n]*)")
     end
     local function tzidOf(block, key)
-        return (block:match("\n" .. key .. "([^:\n]*):") or ""):match("TZID=([^;:]+)")
+        return (block:match("\n" .. pat(key) .. "([^:\n]*):") or ""):match("TZID=([^;:]+)")
     end
 
     local blocks = {}
